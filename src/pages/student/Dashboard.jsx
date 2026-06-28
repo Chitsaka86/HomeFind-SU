@@ -94,6 +94,8 @@ const Stars = ({ rating }) => {
 };
 
 const Navbar = ({ activePage, setPage, userName }) => {
+  const displayName = userName || JSON.parse(localStorage.getItem('user') || '{}').name || "Student";
+  
   const navItems = [
     { id: "dashboard", label: "Dashboard" },
     { id: "bookings", label: "My bookings" },
@@ -170,7 +172,7 @@ const Navbar = ({ activePage, setPage, userName }) => {
           cursor: "pointer",
         }}
       >
-        {userName.split(" ").map((word) => word[0]).join("").slice(0, 2)}
+        {displayName.split(" ").map((word) => word[0]).join("").slice(0, 2)}
       </div>
     </nav>
   );
@@ -675,9 +677,14 @@ const DashboardPage = ({ onView, properties, loading, error }) => {
             </div>
           ) : filteredProperties.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 0", color: C.textSec }}>
-              <MagnifyingGlassIcon style={{ width: 40, height: 40, marginBottom: 12, color: C.textSec }} />
-              <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 6px", color: C.text }}>No properties found</p>
-              <p style={{ fontSize: 12, margin: 0 }}>Try adjusting your filters or search term.</p>
+              <HomeModernIcon style={{ width: 60, height: 60, marginBottom: 16, color: C.textTer }} />
+              <p style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px", color: C.text }}>No properties available</p>
+              <p style={{ fontSize: 14, margin: "0 0 4px", color: C.textSec }}>
+                There are currently no properties listed in the database.
+              </p>
+              <p style={{ fontSize: 13, color: C.textTer }}>
+                Check back later or contact the administrator.
+              </p>
             </div>
           ) : (
             <div
@@ -688,7 +695,7 @@ const DashboardPage = ({ onView, properties, loading, error }) => {
               }}
             >
               {filteredProperties.map((property) => (
-                <PropertyCard key={property.id} property={property} onView={onView} />
+                <PropertyCard key={property.id || property.property_id || `property-${Math.random()}`} property={property} onView={onView} />
               ))}
             </div>
           )}
@@ -737,6 +744,7 @@ export default function StudentDashboard() {
     };
   }, []);
 
+  
   useEffect(() => {
     let isActive = true;
 
@@ -744,7 +752,20 @@ export default function StudentDashboard() {
       try {
         setStudentLoading(true);
         setStudentError("");
-        const data = await fetchStudentDashboard();
+        
+        
+        const userData = JSON.parse(localStorage.getItem('user') || '{}');
+        console.log(' Loading dashboard for:', userData.email);
+        
+        if (!userData.email) {
+          setStudentError("No email found. Please log in again.");
+          setStudentLoading(false);
+          return;
+        }
+        
+       
+        const data = await fetchStudentDashboard(userData.email);
+        
         if (isActive) {
           setStudentData({
             student: data.student || null,
@@ -754,6 +775,18 @@ export default function StudentDashboard() {
         }
       } catch (loadError) {
         if (isActive) {
+          console.warn(' API error, using localStorage data:', loadError.message);
+          
+          const userData = JSON.parse(localStorage.getItem('user') || '{}');
+          setStudentData({
+            student: {
+              fullName: userData.name || "Student",
+              email: userData.email || "",
+              phone: ""
+            },
+            bookings: [],
+            savedProperties: [],
+          });
           setStudentError(loadError instanceof Error ? loadError.message : "Unable to load student dashboard data.");
         }
       } finally {
@@ -763,6 +796,7 @@ export default function StudentDashboard() {
       }
     };
 
+    
     loadStudentDashboard();
 
     return () => {

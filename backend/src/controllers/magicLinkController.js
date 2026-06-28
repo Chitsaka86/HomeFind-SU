@@ -61,7 +61,7 @@ async function sendViaResend({ to, from, subject, html, text }) {
       const data = await response.json();
       message = data?.message || data?.error || message;
     } catch {
-      // Keep the default message when Resend returns non-JSON.
+      
     }
     return { ok: false, error: message };
   }

@@ -1,23 +1,34 @@
-import pkg from "pg";
-import dotenv from "dotenv";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import pkg from 'pg';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(currentDir, "../../.env"), override: true });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
+dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
 const { Pool } = pkg;
 
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD ?? "",
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432'),
+    database: process.env.DB_NAME || 'HomeFind-SU',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
 });
 
-pool.connect()
-  .then(() => console.log("PostgreSQL Connected"))
-  .catch(err => console.error("Database Error:", err));
+pool.connect((err, client, release) => {
+    if (err) {
+        console.error(' Database connection failed:', err.stack);
+    } else {
+        console.log(' Database connected successfully!');
+        release();
+    }
+});
 
 export default pool;

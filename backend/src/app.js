@@ -5,6 +5,7 @@ import testRoutes from "./routers/testRoutes.js";
 import authRoutes from "./routers/authRoutes.js";
 import magicLinkRoutes from "./routers/magicLinkRoutes.js";
 import propertyRoutes from "./routers/propertyRouters.js";
+import landlordDashboardRoutes from "./routers/landlordDashboardRoutes.js";
 import studentDashboardRoutes from "./routers/studentDashboardRoutes.js";
 
 const app = express();
@@ -17,6 +18,7 @@ app.use("/api/test", testRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/magic-link", magicLinkRoutes);
 app.use("/api/properties", propertyRoutes);
+app.use("/api/landlord-dashboard", landlordDashboardRoutes);
 app.use("/api/student-dashboard", studentDashboardRoutes);
 app.get("/", (req, res) => {
   res.json({
