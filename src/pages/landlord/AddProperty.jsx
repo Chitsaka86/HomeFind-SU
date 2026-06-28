@@ -1,40 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { C } from "./landlordTheme";
-import {
-  XMarkIcon,
-  PlusIcon,
-  HomeModernIcon,
-  MapPinIcon,
-  CurrencyDollarIcon,
-  DocumentTextIcon,
-  BuildingOffice2Icon,
-  MagnifyingGlassIcon,
+import {XMarkIcon, PlusIcon, HomeModernIcon,  MapPinIcon,  CurrencyDollarIcon,  DocumentTextIcon, BuildingOffice2Icon, MagnifyingGlassIcon,  PhotoIcon,  TrashIcon,
 } from "@heroicons/react/24/outline";
-
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 
-const ALL_AMENITIES = [
-  "WiFi",
-  "24hr water",
-  "Caretaker",
-  "Parking",
-  "CCTV",
-  "Backup power",
-  "Laundry area",
-  "Balcony",
-  "Furnished rooms",
-  "Elevator",
-  "Gym",
-  "Swimming pool",
+const ALL_AMENITIES = ["WiFi",  "24hr water",  "Caretaker",  "Parking",  "CCTV",  "Backup power",  "Laundry area",  "Balcony",  "Furnished rooms",  "Elevator",  "Gym",  "Swimming pool",
 ];
 
-
 const PROPERTY_TYPES = ["Bedsitter", "Studio", "1BR", "2BR", "3BR", "4BR+"];
-
-
 const STATUS_OPTIONS = ["available", "booked", "pending"];
+const MAX_IMAGES = 10;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; 
 
 const EMPTY_FORM = {
   title: "",
@@ -47,8 +25,8 @@ const EMPTY_FORM = {
   description: "",
   amenities: [],
   rules: "",
+  images: [],
 };
-
 
 function debounce(func, wait) {
   let timeout;
@@ -81,44 +59,68 @@ export default function AddProperty({ onSave, onCancel }) {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapError, setMapError] = useState(false);
+  const [isMapInitializing, setIsMapInitializing] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [imageErrors, setImageErrors] = useState([]);
   
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef = useRef(null);
   const searchInputRef = useRef(null);
   const suggestionsRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   
   useEffect(() => {
-    
-    if (!selectedLocation && !form.locationLat) return;
+    if (!selectedLocation && !form.locationLat) {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        markerRef.current = null;
+        setMapLoaded(false);
+      }
+      return;
+    }
+
+    if (isMapInitializing) return;
+    if (mapInstanceRef.current) {
+      const lat = form.locationLat || selectedLocation?.lat || -1.2864;
+      const lng = form.locationLng || selectedLocation?.lon || 36.8172;
+      mapInstanceRef.current.setView([lat, lng], 15);
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      }
+      return;
+    }
+
+    setIsMapInitializing(true);
 
     const initMap = () => {
       try {
-        
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.remove();
-          mapInstanceRef.current = null;
-          markerRef.current = null;
-        }
-
         const lat = form.locationLat || selectedLocation?.lat || -1.2864;
         const lng = form.locationLng || selectedLocation?.lon || 36.8172;
 
-      
-        mapInstanceRef.current = L.map(mapContainerRef.current).setView([lat, lng], 15);
+        mapInstanceRef.current = L.map(mapContainerRef.current, {
+          fadeAnimation: false,
+          zoomAnimation: false,
+          markerZoomAnimation: false,
+        }).setView([lat, lng], 15);
 
+        
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           maxZoom: 19,
         }).addTo(mapInstanceRef.current);
 
         
+        L.control.zoom({
+          position: 'topright'
+        }).addTo(mapInstanceRef.current);
+
         markerRef.current = L.marker([lat, lng], {
           draggable: true,
         }).addTo(mapInstanceRef.current);
 
-        
         markerRef.current.on('dragend', function() {
           const position = markerRef.current.getLatLng();
           setForm(prev => ({
@@ -126,44 +128,38 @@ export default function AddProperty({ onSave, onCancel }) {
             locationLat: position.lat,
             locationLng: position.lng,
           }));
-          
           reverseGeocode(position.lat, position.lng);
         });
 
         setMapLoaded(true);
         setMapError(false);
+        setIsMapInitializing(false);
       } catch (error) {
         console.error('Error loading map:', error);
         setMapError(true);
+        setIsMapInitializing(false);
       }
     };
 
-    
-    const timer = setTimeout(initMap, 100);
+    const timer = setTimeout(initMap, 200);
 
-    
     return () => {
       clearTimeout(timer);
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-        markerRef.current = null;
-        setMapLoaded(false);
-      }
     };
   }, [form.locationLat, form.locationLng, selectedLocation]);
 
   
   useEffect(() => {
-    if (mapInstanceRef.current && form.locationLat && form.locationLng) {
-      mapInstanceRef.current.setView([form.locationLat, form.locationLng], 15);
-      if (markerRef.current) {
-        markerRef.current.setLatLng([form.locationLat, form.locationLng]);
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        markerRef.current = null;
       }
-    }
-  }, [form.locationLat, form.locationLng]);
+    };
+  }, []);
 
-  
+  // Search locations
   const searchLocations = useCallback(async (query) => {
     if (!query || query.length < 2) {
       setSuggestions([]);
@@ -174,7 +170,7 @@ export default function AddProperty({ onSave, onCancel }) {
     setIsLoadingSuggestions(true);
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&q=${encodeURIComponent(query)}&countrycodes=ke`,
+        `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q=${encodeURIComponent(query)}&countrycodes=ke`,
         {
           headers: {
             'Accept': 'application/json',
@@ -201,20 +197,17 @@ export default function AddProperty({ onSave, onCancel }) {
     }
   }, []);
 
-  
   const debouncedSearch = useCallback(
-    debounce((query) => searchLocations(query), 400),
+    debounce((query) => searchLocations(query), 300),
     [searchLocations]
   );
 
-  
   const handleLocationInputChange = (value) => {
     setSearchQuery(value);
     setShowSuggestions(true);
     debouncedSearch(value);
   };
 
-  
   const selectSuggestion = (suggestion) => {
     setSelectedLocation(suggestion);
     setForm(prev => ({
@@ -228,7 +221,6 @@ export default function AddProperty({ onSave, onCancel }) {
     setSuggestions([]);
   };
 
-  
   const reverseGeocode = async (lat, lng) => {
     try {
       const response = await fetch(
@@ -254,7 +246,85 @@ export default function AddProperty({ onSave, onCancel }) {
     }
   };
 
-  
+  // Image handling functions
+  const handleImageUpload = (event) => {
+    const files = Array.from(event.target.files);
+    const newErrors = [];
+    const validFiles = [];
+
+    files.forEach(file => {
+      if (file.size > MAX_FILE_SIZE) {
+        newErrors.push(`${file.name} exceeds 5MB limit`);
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        newErrors.push(`${file.name} is not an image file`);
+        return;
+      }
+      validFiles.push(file);
+    });
+
+    if (newErrors.length > 0) {
+      setImageErrors(newErrors);
+      setTimeout(() => setImageErrors([]), 5000);
+    }
+
+    if (validFiles.length === 0) return;
+
+    if (form.images.length + validFiles.length > MAX_IMAGES) {
+      setImageErrors([`Maximum ${MAX_IMAGES} images allowed. You can add ${MAX_IMAGES - form.images.length} more.`]);
+      setTimeout(() => setImageErrors([]), 5000);
+      return;
+    }
+
+    setUploadingImages(true);
+
+    validFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageData = {
+          id: Date.now() + Math.random() * 1000,
+          url: e.target.result,
+          file: file,
+          caption: file.name.split('.')[0],
+          isPrimary: form.images.length === 0,
+        };
+        setForm(prev => ({
+          ...prev,
+          images: [...prev.images, imageData],
+        }));
+        setUploadingImages(false);
+      };
+      reader.onerror = () => {
+        setImageErrors(['Failed to read image file']);
+        setTimeout(() => setImageErrors([]), 5000);
+        setUploadingImages(false);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeImage = (imageId) => {
+    setForm(prev => ({
+      ...prev,
+      images: prev.images.filter(img => img.id !== imageId),
+    }));
+  };
+
+  const setPrimaryImage = (imageId) => {
+    setForm(prev => ({
+      ...prev,
+      images: prev.images.map(img => ({
+        ...img,
+        isPrimary: img.id === imageId,
+      })),
+    }));
+  };
+
   const toggleAmenity = (amenity) => {
     setForm((current) => ({
       ...current,
@@ -264,7 +334,6 @@ export default function AddProperty({ onSave, onCancel }) {
     }));
   };
 
-  
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     if (errors[field]) {
@@ -272,25 +341,33 @@ export default function AddProperty({ onSave, onCancel }) {
     }
   };
 
-  
   const validateForm = () => {
     const newErrors = {};
     if (!form.title.trim()) newErrors.title = "Title is required";
     if (!form.location.trim()) newErrors.location = "Location is required";
     if (!form.price || form.price <= 0) newErrors.price = "Valid price is required";
     if (!form.description.trim()) newErrors.description = "Description is required";
+    if (form.images.length === 0) newErrors.images = "At least one image is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  
   const handleSubmit = (event) => {
     event.preventDefault();
     if (!validateForm()) return;
-    onSave?.(form);
+    
+    const submissionData = {
+      ...form,
+      images: form.images.map(img => ({
+        url: img.url,
+        caption: img.caption,
+        isPrimary: img.isPrimary,
+      })),
+    };
+    
+    onSave?.(submissionData);
     setSubmitted(true);
   };
-
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -362,6 +439,8 @@ export default function AddProperty({ onSave, onCancel }) {
         borderRadius: 16, 
         padding: 28,
         boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        maxHeight: "90vh",
+        overflowY: "auto",
       }}>
         <div style={{ 
           display: "flex", 
@@ -462,7 +541,6 @@ export default function AddProperty({ onSave, onCancel }) {
               </div>
               {errors.location && <p style={{ color: C.danger, fontSize: 11, margin: "4px 0 0" }}>{errors.location}</p>}
 
-              {/* Suggestions Dropdown */}
               {showSuggestions && suggestions.length > 0 && (
                 <div
                   ref={suggestionsRef}
@@ -548,7 +626,22 @@ export default function AddProperty({ onSave, onCancel }) {
                 overflow: "hidden",
               }}
             >
-              {!mapLoaded && !mapError && (
+              {!mapLoaded && !mapError && !form.locationLat && !selectedLocation && (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  color: C.textSec,
+                  fontSize: 13,
+                  flexDirection: "column",
+                  gap: 8,
+                }}>
+                  <MapPinIcon style={{ width: 32, height: 32, color: C.textTer }} />
+                  <span>Search for a location above to see the map</span>
+                </div>
+              )}
+              {!mapLoaded && !mapError && (form.locationLat || selectedLocation) && (
                 <div style={{
                   display: "flex",
                   alignItems: "center",
@@ -603,6 +696,180 @@ export default function AddProperty({ onSave, onCancel }) {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Image Upload Section */}
+          <div>
+            <label style={labelStyle}>
+              <PhotoIcon style={{ width: 16, height: 16 }} />
+              Property Images
+              <span style={{ fontSize: 11, color: C.textTer, fontWeight: 400, marginLeft: 8 }}>
+                ({form.images.length}/{MAX_IMAGES})
+              </span>
+            </label>
+            
+            <div
+              style={{
+                border: `2px dashed ${errors.images ? C.danger : C.border}`,
+                borderRadius: 8,
+                padding: 20,
+                textAlign: "center",
+                cursor: "pointer",
+                transition: "all 0.15s",
+                background: "#FAFAF8",
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = C.blue;
+                e.currentTarget.style.background = C.blueTint;
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.style.borderColor = C.border;
+                e.currentTarget.style.background = "#FAFAF8";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = C.border;
+                e.currentTarget.style.background = "#FAFAF8";
+                if (e.dataTransfer.files.length > 0) {
+                  handleImageUpload({ target: { files: e.dataTransfer.files } });
+                }
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                style={{ display: "none" }}
+              />
+              <PhotoIcon style={{ width: 32, height: 32, color: C.textTer, marginBottom: 8 }} />
+              <p style={{ margin: 0, fontSize: 13, color: C.text }}>
+                Click or drag to upload images
+              </p>
+              <p style={{ margin: "4px 0 0", fontSize: 11, color: C.textTer }}>
+                PNG, JPG, WebP up to 5MB each (Max {MAX_IMAGES} images)
+              </p>
+            </div>
+
+            {errors.images && (
+              <p style={{ color: C.danger, fontSize: 11, margin: "4px 0 0" }}>{errors.images}</p>
+            )}
+            {imageErrors.map((err, index) => (
+              <p key={index} style={{ color: C.danger, fontSize: 11, margin: "4px 0 0" }}>⚠️ {err}</p>
+            ))}
+            {uploadingImages && (
+              <p style={{ color: C.textSec, fontSize: 11, margin: "4px 0 0" }}>
+                <span style={{
+                  display: "inline-block",
+                  width: 14,
+                  height: 14,
+                  border: `2px solid ${C.border}`,
+                  borderTop: `2px solid ${C.blue}`,
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                  marginRight: 8,
+                }} />
+                Uploading images...
+              </p>
+            )}
+
+            {form.images.length > 0 && (
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+                gap: 10,
+                marginTop: 10,
+              }}>
+                {form.images.map((image) => (
+                  <div
+                    key={image.id}
+                    style={{
+                      position: "relative",
+                      borderRadius: 8,
+                      overflow: "hidden",
+                      border: image.isPrimary ? `2px solid ${C.blue}` : `1px solid ${C.border}`,
+                      aspectRatio: "1",
+                      background: C.bg,
+                    }}
+                  >
+                    <img
+                      src={image.url}
+                      alt={image.caption || "Property image"}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                    {image.isPrimary && (
+                      <div style={{
+                        position: "absolute",
+                        top: 4,
+                        left: 4,
+                        background: C.blue,
+                        color: "#fff",
+                        fontSize: 9,
+                        fontWeight: 600,
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                      }}>
+                        Primary
+                      </div>
+                    )}
+                    
+                    <div style={{
+                      position: "absolute",
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      padding: 6,
+                      background: "rgba(0,0,0,0.6)",
+                      display: "flex",
+                      gap: 4,
+                      alignItems: "center",
+                    }}>
+                      {!image.isPrimary && (
+                        <button
+                          type="button"
+                          onClick={() => setPrimaryImage(image.id)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#fff",
+                            fontSize: 9,
+                            cursor: "pointer",
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            background: "rgba(255,255,255,0.2)",
+                          }}
+                        >
+                          Set Primary
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeImage(image.id)}
+                        style={{
+                          marginLeft: "auto",
+                          background: "transparent",
+                          border: "none",
+                          color: "#fff",
+                          cursor: "pointer",
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          background: "rgba(255,0,0,0.5)",
+                        }}
+                      >
+                        <TrashIcon style={{ width: 14, height: 14 }} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Price, Type, Status */}
