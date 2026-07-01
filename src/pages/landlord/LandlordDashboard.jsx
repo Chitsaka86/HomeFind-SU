@@ -10,6 +10,12 @@ import {
   MapPinIcon,
   CurrencyDollarIcon,
   HomeModernIcon,
+  MagnifyingGlassIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  HandRaisedIcon,
+  PencilIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import AddProperty from "./AddProperty";
 import EditProperty from "./EditProperty";
@@ -28,16 +34,16 @@ function StatCard({ label, value, icon, tone = "text" }) {
     <div style={{ 
       background: C.surface, 
       border: `1px solid ${C.border}`, 
-      borderRadius: 14, 
-      padding: 20,
+      borderRadius: 12, 
+      padding: 16,
       display: "flex",
       alignItems: "center",
-      gap: 16,
+      gap: 12,
     }}>
       <div style={{
-        width: 48,
-        height: 48,
-        borderRadius: 12,
+        width: 40,
+        height: 40,
+        borderRadius: 10,
         background: colors[tone]?.bg || C.blueTint,
         display: "flex",
         alignItems: "center",
@@ -48,8 +54,8 @@ function StatCard({ label, value, icon, tone = "text" }) {
         {icon}
       </div>
       <div>
-        <p style={{ margin: "0 0 4px", fontSize: 13, color: C.textSec }}>{label}</p>
-        <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: C.text }}>{value}</p>
+        <p style={{ margin: "0 0 2px", fontSize: 11, color: C.textSec }}>{label}</p>
+        <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text }}>{value}</p>
       </div>
     </div>
   );
@@ -59,24 +65,24 @@ function EmptyState({ icon, title, description, action }) {
   return (
     <div style={{
       textAlign: "center",
-      padding: "60px 20px",
+      padding: "40px 20px",
       color: C.textSec,
     }}>
       <div style={{
-        width: 72,
-        height: 72,
+        width: 56,
+        height: 56,
         borderRadius: "50%",
         background: C.blueTint,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        margin: "0 auto 16px",
+        margin: "0 auto 12px",
         color: C.blue,
       }}>
         {icon}
       </div>
-      <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: "0 0 8px" }}>{title}</h3>
-      <p style={{ fontSize: 14, margin: "0 0 20px", color: C.textSec }}>{description}</p>
+      <h3 style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: "0 0 4px" }}>{title}</h3>
+      <p style={{ fontSize: 12, margin: "0 0 16px", color: C.textSec }}>{description}</p>
       {action}
     </div>
   );
@@ -92,6 +98,31 @@ function LandlordDashboard() {
   const [editingProperty, setEditingProperty] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editProfileData, setEditProfileData] = useState({ fullName: "", phone: "", email: "" });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [profileError, setProfileError] = useState("");
+
+  const reloadDashboard = async () => {
+    try {
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      if (!userData.email) {
+        setError("No email found. Please log in again.");
+        return;
+      }
+      const data = await fetchLandlordDashboard(userData.email);
+      setLandlord(data.landlord);
+      setStats(data.stats);
+      setRecentListings(data.recentListings);
+      setProperties(data.properties);
+      setBookings(data.bookings);
+    } catch (error) {
+      console.error('Error reloading dashboard:', error);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -102,7 +133,7 @@ function LandlordDashboard() {
 
       try {
         const userData = JSON.parse(localStorage.getItem('user') || '{}');
-        console.log('📧 Loading landlord dashboard for:', userData.email);
+        console.log('Loading landlord dashboard for:', userData.email);
         
         if (!userData.email) {
           setError("No email found. Please log in again.");
@@ -147,8 +178,8 @@ function LandlordDashboard() {
     };
   }, []);
 
-  const handleSaveNew = form => {
-    setProperties(current => [...current, { ...form, id: Date.now(), rating: null, reviews: 0, status: "pending" }]);
+  const handleSaveNew = async (form) => {
+    await reloadDashboard();
     setPage("listings");
   };
 
@@ -166,9 +197,62 @@ function LandlordDashboard() {
     setBookings(current => current.map(booking => (booking.id === id ? { ...booking, status } : booking)));
   };
 
+  // Edit profile handlers
+  const openEditProfile = () => {
+    if (landlord) {
+      setEditProfileData({
+        fullName: landlord.fullName || "",
+        phone: landlord.phone || "",
+        email: landlord.email || "",
+      });
+      setShowEditProfile(true);
+      setProfileError("");
+      setProfileSuccess(false);
+    }
+  };
+
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+    setProfileSaving(true);
+    setProfileError("");
+    setProfileSuccess(false);
+
+    try {
+      // Update local state
+      setLandlord(prev => ({
+        ...prev,
+        fullName: editProfileData.fullName,
+        phone: editProfileData.phone,
+      }));
+      
+      // Update localStorage
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      userData.name = editProfileData.fullName;
+      localStorage.setItem('user', JSON.stringify(userData));
+
+      setProfileSuccess(true);
+      setTimeout(() => {
+        setShowEditProfile(false);
+        setProfileSuccess(false);
+      }, 1500);
+    } catch (err) {
+      setProfileError(err.message || "Failed to update profile");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const filteredProperties = properties.filter(property => {
+    const matchesSearch = property.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          property.location.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === "all" || property.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
+
   const totalProperties = stats.totalProperties;
   const pendingProperties = stats.pendingApprovals;
   const confirmedBookings = stats.confirmedBookings;
+  const availableProperties = totalProperties - pendingProperties - confirmedBookings;
 
   const profileInitials = useMemo(() => {
     if (landlord?.fullName) {
@@ -197,80 +281,81 @@ function LandlordDashboard() {
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "Inter, system-ui, Arial, sans-serif" }}>
       {/* Header */}
       <header style={headerStyle}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={brandIconStyle}>
-            <HomeIcon style={{ width: 18, height: 18, color: "#fff" }} />
+            <HomeIcon style={{ width: 16, height: 16, color: "#fff" }} />
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>HomeFind SU</div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>HomeFind SU</div>
             <Badge variant="warning">Landlord</Badge>
           </div>
         </div>
 
-        <nav style={navStyle}>
-          {[
-            ["dashboard", "Dashboard"],
-            ["listings", "My listings"],
-            ["requests", "Requests"],
-            ["add", "+ Add property"],
-            ["profile", "Profile"],
-          ].map(([value, label]) => (
-            <button
-              type="button"
-              key={value}
-              onClick={() => {
-                setEditingProperty(null);
-                setPage(value);
-              }}
-              style={navButtonStyle(page === value, value === "add")}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <nav style={{ ...navStyle, marginRight: 6 }}>
+            {[
+              ["dashboard", "Dashboard"],
+              ["listings", "Listings"],
+              ["requests", "Requests"],
+              ["add", "+ Add"],
+              ["profile", "Profile"],
+            ].map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                onClick={() => {
+                  setEditingProperty(null);
+                  setPage(value);
+                }}
+                style={navButtonStyle(page === value, value === "add")}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
 
-        {/*  Avatar  */}
-        <div style={avatarStyle}>
-          {profileInitials}
+          <div style={avatarStyle}>
+            {profileInitials}
+          </div>
         </div>
       </header>
 
-      <main style={{ padding: "24px 32px", maxWidth: 1200, margin: "0 auto" }}>
+      <main style={{ padding: "20px 28px", maxWidth: 1200, margin: "0 auto" }}>
         {loading ? (
           <section style={panelStyle}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
               <div style={{ 
-                width: 32, 
-                height: 32, 
-                border: `3px solid ${C.border}`,
-                borderTop: `3px solid ${C.blue}`,
+                width: 24, 
+                height: 24, 
+                border: `2px solid ${C.border}`,
+                borderTop: `2px solid ${C.blue}`,
                 borderRadius: "50%",
                 animation: "spin 1s linear infinite",
-                marginRight: 12,
+                marginRight: 10,
               }} />
-              <p style={{ margin: 0, color: C.textSec }}>Loading dashboard...</p>
+              <p style={{ margin: 0, color: C.textSec, fontSize: 12 }}>Loading dashboard...</p>
             </div>
           </section>
         ) : null}
 
         {error ? (
           <section style={{ ...panelStyle, borderColor: C.danger }}>
-            <div style={{ textAlign: "center", padding: 20 }}>
-              <p style={{ margin: 0, color: C.danger, fontWeight: 600 }}>{error}</p>
+            <div style={{ textAlign: "center", padding: 16 }}>
+              <p style={{ margin: 0, color: C.danger, fontWeight: 600, fontSize: 13 }}>{error}</p>
               <button 
                 onClick={() => {
                   localStorage.removeItem('user');
                   window.location.href = '/';
                 }}
                 style={{ 
-                  marginTop: 12, 
-                  padding: "8px 24px", 
+                  marginTop: 10, 
+                  padding: "6px 20px", 
                   background: C.blue, 
                   color: "#fff", 
                   border: "none", 
-                  borderRadius: 6, 
-                  cursor: "pointer",
+                  borderRadius: 5, 
                   fontWeight: 600,
+                  fontSize: 12,
                 }}
               >
                 Go to Login
@@ -280,47 +365,152 @@ function LandlordDashboard() {
         ) : null}
 
         {!loading && !error && page === "dashboard" ? (
-          <div style={{ display: "grid", gap: 24 }}>
+          <div style={{ display: "grid", gap: 18 }}>
+            {/* Welcome Message */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 10,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: "50%",
+                  background: C.blueTint,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: C.blue,
+                }}>
+                  <HandRaisedIcon style={{ width: 18, height: 18 }} />
+                </div>
+                <div>
+                  <h1 style={{ 
+                    margin: 0, 
+                    fontSize: 18, 
+                    fontWeight: 700, 
+                    color: C.text 
+                  }}>
+                    Welcome back, {landlord?.fullName || "Landlord"}!
+                  </h1>
+                  <p style={{ 
+                    margin: "2px 0 0", 
+                    fontSize: 12, 
+                    color: C.textSec 
+                  }}>
+                    Here's what's happening with your properties today
+                  </p>
+                </div>
+              </div>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}>
+                <span style={{
+                  background: C.blueTint,
+                  color: C.blue,
+                  padding: "3px 10px",
+                  borderRadius: 9999,
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}>
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </span>
+              </div>
+            </div>
+
             {/* Stats Grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
               <StatCard 
                 label="Total Properties" 
                 value={totalProperties} 
-                icon={<BuildingOffice2Icon style={{ width: 24, height: 24 }} />}
+                icon={<BuildingOffice2Icon style={{ width: 20, height: 20 }} />}
                 tone="text"
               />
               <StatCard 
                 label="Pending Approvals" 
                 value={pendingProperties} 
-                icon={<ClipboardDocumentListIcon style={{ width: 24, height: 24 }} />}
+                icon={<ClipboardDocumentListIcon style={{ width: 20, height: 20 }} />}
                 tone="warning"
               />
               <StatCard 
                 label="Confirmed Bookings" 
                 value={confirmedBookings} 
-                icon={<HomeModernIcon style={{ width: 24, height: 24 }} />}
+                icon={<HomeModernIcon style={{ width: 20, height: 20 }} />}
                 tone="green"
               />
+              <StatCard 
+                label="Available Properties" 
+                value={availableProperties} 
+                icon={<BuildingOffice2Icon style={{ width: 20, height: 20 }} />}
+                tone="text"
+              />
+            </div>
+
+            {/* Status Distribution */}
+            <div style={panelStyle}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.text }}>Property Status</h3>
+                <span style={{ fontSize: 10, color: C.textSec }}>{totalProperties} total</span>
+              </div>
+              <div style={{ display: "flex", gap: 3, height: 6, borderRadius: 3, overflow: "hidden", background: C.border }}>
+                {totalProperties > 0 && (
+                  <>
+                    <div style={{ 
+                      flex: pendingProperties / totalProperties, 
+                      background: C.warning,
+                      borderRadius: pendingProperties > 0 ? "3px 0 0 3px" : "0",
+                    }} />
+                    <div style={{ 
+                      flex: confirmedBookings / totalProperties, 
+                      background: C.green,
+                    }} />
+                    <div style={{ 
+                      flex: availableProperties / totalProperties, 
+                      background: C.blue,
+                      borderRadius: availableProperties > 0 ? "0 3px 3px 0" : "0",
+                    }} />
+                  </>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.warning }} />
+                  <span style={{ fontSize: 10, color: C.textSec }}>Pending ({pendingProperties})</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.green }} />
+                  <span style={{ fontSize: 10, color: C.textSec }}>Booked ({confirmedBookings})</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.blue }} />
+                  <span style={{ fontSize: 10, color: C.textSec }}>Available ({availableProperties})</span>
+                </div>
+              </div>
             </div>
 
             {/* Recent Listings */}
             <section style={panelStyle}>
               <div style={sectionHeaderStyle}>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Recent listings</h2>
-                  <p style={{ margin: "4px 0 0", fontSize: 13, color: C.textSec }}>Your most recent property listings</p>
+                  <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#000000' }}>Recent listings</h2>
+                  <p style={{ margin: "2px 0 0", fontSize: 11, color: '#000000' }}>Your most recent property listings</p>
                 </div>
                 <button type="button" onClick={() => setPage("listings")} style={linkButtonStyle}>View all →</button>
               </div>
               {recentListings.length > 0 ? (
-                <div style={{ display: "grid", gap: 12 }}>
+                <div style={{ display: "grid", gap: 8 }}>
                   {recentListings.map(property => (
                     <div key={property.id} style={rowStyle}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
                         <div style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 8,
+                          width: 32,
+                          height: 32,
+                          borderRadius: 6,
                           background: C.blueTint,
                           display: "flex",
                           alignItems: "center",
@@ -328,12 +518,12 @@ function LandlordDashboard() {
                           color: C.blue,
                           flexShrink: 0,
                         }}>
-                          <BuildingOffice2Icon style={{ width: 20, height: 20 }} />
+                          <BuildingOffice2Icon style={{ width: 16, height: 16 }} />
                         </div>
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 14 }}>{property.title}</div>
-                          <div style={{ color: C.textSec, fontSize: 12 }}>
-                            <MapPinIcon style={{ width: 12, height: 12, display: "inline", marginRight: 4 }} />
+                          <div style={{ fontWeight: 600, fontSize: 12, color: '#000000' }}>{property.title}</div>
+                          <div style={{ color: '#000000', fontSize: 10 }}>
+                            <MapPinIcon style={{ width: 10, height: 10, display: "inline", marginRight: 3 }} />
                             {property.location} · KSh {Number(property.price).toLocaleString()}/mo
                           </div>
                         </div>
@@ -346,20 +536,20 @@ function LandlordDashboard() {
                 </div>
               ) : (
                 <EmptyState 
-                  icon={<BuildingOffice2Icon style={{ width: 32, height: 32 }} />}
+                  icon={<BuildingOffice2Icon style={{ width: 24, height: 24 }} />}
                   title="No listings yet"
                   description="Start by adding your first property listing."
                   action={
                     <button 
                       onClick={() => setPage("add")} 
                       style={{
-                        padding: "10px 24px",
+                        padding: "6px 16px",
                         background: C.text,
                         color: "#fff",
                         border: "none",
-                        borderRadius: 8,
-                        cursor: "pointer",
+                        borderRadius: 6,
                         fontWeight: 600,
+                        fontSize: 11,
                       }}
                     >
                       + Add Property
@@ -368,6 +558,65 @@ function LandlordDashboard() {
                 />
               )}
             </section>
+
+            {/* Recent Activity */}
+            <section style={panelStyle}>
+              <div style={sectionHeaderStyle}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#000000' }}>Recent Activity</h2>
+                  <p style={{ margin: "2px 0 0", fontSize: 11, color: '#000000' }}>Latest updates on your properties</p>
+                </div>
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {properties.length > 0 ? (
+                  properties.slice(0, 3).map((property, index) => (
+                    <div key={index} style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "10px 12px",
+                      background: "#FAFAF8",
+                      borderRadius: 8,
+                      border: `1px solid ${C.border}`,
+                    }}>
+                      <div style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: "50%",
+                        background: property.status === "pending" ? C.warnTint : C.greenTint,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: property.status === "pending" ? C.warning : C.green,
+                      }}>
+                        {property.status === "pending" ? (
+                          <ClockIcon style={{ width: 16, height: 16 }} />
+                        ) : (
+                          <CheckCircleIcon style={{ width: 16, height: 16 }} />
+                        )}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 12, color: '#000000' }}>{property.title}</div>
+                        <div style={{ fontSize: 10, color: '#000000' }}>
+                          {property.status === "pending" 
+                            ? "Submitted for approval" 
+                            : property.status === "booked" 
+                            ? "Booking confirmed" 
+                            : "Property active"}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 9, color: '#000000' }}>
+                        {new Date(property.created_at || Date.now()).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ color: '#000000', textAlign: "center", padding: "16px 0", fontSize: 12 }}>
+                    No recent activity
+                  </p>
+                )}
+              </div>
+            </section>
           </div>
         ) : null}
 
@@ -375,25 +624,76 @@ function LandlordDashboard() {
           <section style={panelStyle}>
             <div style={sectionHeaderStyle}>
               <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>My listings</h2>
-                <p style={{ margin: "4px 0 0", fontSize: 13, color: C.textSec }}>Review, edit, or delete your properties</p>
+                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>My listings</h2>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: C.textSec }}>Review, edit, or delete your properties</p>
               </div>
               <button type="button" onClick={() => setPage("add")} style={primaryActionButton}>
-                <PlusIcon style={{ width: 16, height: 16, marginRight: 6 }} />
+                <PlusIcon style={{ width: 14, height: 14, marginRight: 4 }} />
                 Add property
               </button>
             </div>
 
-            {properties.length > 0 ? (
-              <div style={{ display: "grid", gap: 12 }}>
-                {properties.map(property => (
+            {/* Search and Filter */}
+            <div style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 12,
+              flexWrap: "wrap",
+            }}>
+              <div style={{
+                flex: 1,
+                minWidth: 160,
+                display: "flex",
+                alignItems: "center",
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                padding: "0 10px",
+                background: "#fff",
+              }}>
+                <MagnifyingGlassIcon style={{ width: 14, height: 14, color: C.textTer }} />
+                <input
+                  placeholder="Search properties..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{
+                    border: "none",
+                    outline: "none",
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    width: "100%",
+                    background: "transparent",
+                  }}
+                />
+              </div>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                style={{
+                  padding: "8px 12px",
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  fontSize: 11,
+                  background: "#fff",
+                  outline: "none",
+                }}
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="available">Available</option>
+                <option value="booked">Booked</option>
+              </select>
+            </div>
+
+            {filteredProperties.length > 0 ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                {filteredProperties.map(property => (
                   <div key={property.id} style={listingCardStyle}>
                     <div style={listingTopRowStyle}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <div style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 8,
+                          width: 32,
+                          height: 32,
+                          borderRadius: 6,
                           background: C.blueTint,
                           display: "flex",
                           alignItems: "center",
@@ -401,11 +701,11 @@ function LandlordDashboard() {
                           color: C.blue,
                           flexShrink: 0,
                         }}>
-                          <BuildingOffice2Icon style={{ width: 20, height: 20 }} />
+                          <BuildingOffice2Icon style={{ width: 16, height: 16 }} />
                         </div>
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 14 }}>{property.title}</div>
-                          <div style={{ color: C.textSec, fontSize: 12 }}>
+                          <div style={{ fontWeight: 600, fontSize: 12 }}>{property.title}</div>
+                          <div style={{ color: C.textSec, fontSize: 10 }}>
                             {property.location} · {property.type}
                           </div>
                         </div>
@@ -416,11 +716,11 @@ function LandlordDashboard() {
                     </div>
 
                     <div style={listingBottomRowStyle}>
-                      <div style={{ fontWeight: 600, fontSize: 16, color: C.text }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: C.text }}>
                         KSh {Number(property.price).toLocaleString()}
-                        <span style={{ fontSize: 12, fontWeight: 400, color: C.textSec }}>/mo</span>
+                        <span style={{ fontSize: 10, fontWeight: 400, color: C.textSec }}>/mo</span>
                       </div>
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 6 }}>
                         <button type="button" onClick={() => setEditingProperty(property)} style={ghostButtonStyle}>Edit</button>
                         <button type="button" onClick={() => handleDelete(property.id)} style={dangerGhostButtonStyle}>Delete</button>
                       </div>
@@ -430,7 +730,7 @@ function LandlordDashboard() {
               </div>
             ) : (
               <EmptyState 
-                icon={<BuildingOffice2Icon style={{ width: 32, height: 32 }} />}
+                icon={<BuildingOffice2Icon style={{ width: 24, height: 24 }} />}
                 title="No properties listed"
                 description="Click the button above to add your first property listing."
                 action={null}
@@ -443,22 +743,21 @@ function LandlordDashboard() {
 
         {page === "add" ? <AddProperty onSave={handleSaveNew} onCancel={() => setPage("dashboard")} /> : null}
 
-        {/* Profile Page */}
         {page === "profile" ? (
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "24px 0" }}>
-            <div style={{ width: "100%", maxWidth: 420 }}>
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
-                <div style={{ padding: "32px 24px 24px", textAlign: "center", borderBottom: `1px solid ${C.border}`, background: "#FAFAF8" }}>
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "20px 0" }}>
+            <div style={{ width: "100%", maxWidth: 400 }}>
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "24px 20px 20px", textAlign: "center", borderBottom: `1px solid ${C.border}`, background: "#FAFAF8" }}>
                   <div style={{ 
-                    width: 72, 
-                    height: 72, 
+                    width: 60, 
+                    height: 60, 
                     borderRadius: "50%", 
                     background: C.warnTint, 
                     display: "flex", 
                     alignItems: "center", 
                     justifyContent: "center", 
-                    margin: "0 auto 16px", 
-                    fontSize: 28, 
+                    margin: "0 auto 12px", 
+                    fontSize: 22, 
                     fontWeight: 700, 
                     color: C.warning 
                   }}>
@@ -467,25 +766,25 @@ function LandlordDashboard() {
                   
                   {loading ? (
                     <>
-                      <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px", color: C.text }}>Loading profile</p>
-                      <p style={{ fontSize: 13, color: C.textSec, margin: "0 0 12px" }}>Fetching landlord information</p>
+                      <p style={{ fontSize: 14, fontWeight: 700, margin: "0 0 2px", color: C.text }}>Loading profile</p>
+                      <p style={{ fontSize: 11, color: C.textSec, margin: "0 0 10px" }}>Fetching landlord information</p>
                     </>
                   ) : error ? (
                     <>
-                      <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px", color: C.text }}>Could not load profile</p>
-                      <p style={{ fontSize: 13, color: C.textSec, margin: "0 0 12px" }}>{error}</p>
+                      <p style={{ fontSize: 14, fontWeight: 700, margin: "0 0 2px", color: C.text }}>Could not load profile</p>
+                      <p style={{ fontSize: 11, color: C.textSec, margin: "0 0 10px" }}>{error}</p>
                     </>
                   ) : (
                     <>
-                      <p style={{ fontSize: 18, fontWeight: 700, margin: "0 0 4px", color: C.text }}>
+                      <p style={{ fontSize: 15, fontWeight: 700, margin: "0 0 2px", color: C.text }}>
                         {landlord?.fullName || "Landlord"}
                       </p>
-                      <p style={{ fontSize: 13, color: C.textSec, margin: "0 0 4px" }}>
+                      <p style={{ fontSize: 11, color: C.textSec, margin: "0 0 2px" }}>
                         {landlord?.email || "No email on record"}
                       </p>
                       {landlord?.phone && (
-                        <p style={{ fontSize: 13, color: C.textSec, margin: "0 0 16px" }}>
-                          📞 {landlord.phone}
+                        <p style={{ fontSize: 11, color: C.textSec, margin: "0 0 12px" }}>
+                           {landlord.phone}
                         </p>
                       )}
                     </>
@@ -493,12 +792,12 @@ function LandlordDashboard() {
                   <Badge variant="warning">Landlord</Badge>
                 </div>
 
-                <div style={{ padding: "8px 0" }}>
+                <div style={{ padding: "6px 0" }}>
                   {[
-                    { icon: <UserCircleIcon style={{ width: 20, height: 20 }} />, label: "Personal info", action: null },
-                    { icon: <HomeIcon style={{ width: 20, height: 20 }} />, label: "My listings", action: () => setPage("listings") },
-                    { icon: <ClipboardDocumentListIcon style={{ width: 20, height: 20 }} />, label: "Property requests", action: () => setPage("requests") },
-                    { icon: <BellIcon style={{ width: 20, height: 20 }} />, label: "Notifications", action: null },
+                    { icon: <UserCircleIcon style={{ width: 18, height: 18 }} />, label: "Personal info", action: openEditProfile },
+                    { icon: <HomeIcon style={{ width: 18, height: 18 }} />, label: "My listings", action: () => setPage("listings") },
+                    { icon: <ClipboardDocumentListIcon style={{ width: 18, height: 18 }} />, label: "Property requests", action: () => setPage("requests") },
+                    { icon: <BellIcon style={{ width: 18, height: 18 }} />, label: "Notifications", action: null },
                   ].map((item, index) => (
                     <button
                       key={index}
@@ -508,13 +807,13 @@ function LandlordDashboard() {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
-                        padding: "14px 24px",
+                        padding: "10px 20px",
                         background: "none",
                         border: "none",
                         borderBottom: index < 3 ? `1px solid ${C.border}` : "none",
-                        cursor: item.action ? "pointer" : "default",
                         textAlign: "left",
                         transition: "background 0.15s",
+                        cursor: item.action ? "pointer" : "default",
                       }}
                       onMouseEnter={(e) => {
                         if (item.action) e.currentTarget.style.background = C.blueTint;
@@ -523,18 +822,17 @@ function LandlordDashboard() {
                         e.currentTarget.style.background = "transparent";
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ color: C.textSec }}>{item.icon}</span>
-                        <span style={{ fontSize: 14, color: C.text }}>{item.label}</span>
+                        <span style={{ fontSize: 12, color: C.text }}>{item.label}</span>
                       </div>
                       {item.action && (
-                        <span style={{ color: C.textTer, fontSize: 18 }}>→</span>
+                        <span style={{ color: C.textTer, fontSize: 16 }}>→</span>
                       )}
                     </button>
                   ))}
                 </div>
 
-                {/*  Logout button */}
                 <button 
                   onClick={() => {
                     localStorage.removeItem('user');
@@ -544,27 +842,139 @@ function LandlordDashboard() {
                     width: "100%", 
                     display: "flex", 
                     alignItems: "center", 
-                    gap: 12, 
-                    padding: "14px 24px", 
+                    gap: 10, 
+                    padding: "10px 20px", 
                     background: "none", 
                     border: "none",
                     borderTop: `1px solid ${C.border}`,
-                    cursor: "pointer",
                     transition: "background 0.15s",
+                    cursor: "pointer",
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.background = C.dangerTint}
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                 >
                   <span style={{ color: C.danger }}>
-                    <ArrowRightOnRectangleIcon style={{ width: 20, height: 20 }} />
+                    <ArrowRightOnRectangleIcon style={{ width: 18, height: 18 }} />
                   </span>
-                  <span style={{ fontSize: 14, color: C.danger, fontWeight: 600 }}>Sign out</span>
+                  <span style={{ fontSize: 12, color: C.danger, fontWeight: 600 }}>Sign out</span>
                 </button>
               </div>
             </div>
           </div>
         ) : null}
       </main>
+
+      {/*  Edit Profile Modal */}
+      {showEditProfile && (
+        <div style={overlayStyle}>
+          <div style={modalStyle}>
+            <div style={headerStyle}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.text }}>Edit Profile</h2>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: C.textSec }}>Update your personal information</p>
+              </div>
+              <button type="button" onClick={() => setShowEditProfile(false)} style={closeButtonStyle}>
+                <XMarkIcon style={{ width: 20, height: 20 }} />
+              </button>
+            </div>
+
+            {profileSuccess && (
+              <div style={{
+                margin: "12px 20px 0",
+                padding: "10px 14px",
+                background: C.greenTint,
+                border: `1px solid ${C.greenBorder}`,
+                borderRadius: 6,
+                color: C.green,
+                fontSize: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}>
+                
+                Profile updated successfully!
+              </div>
+            )}
+
+            {profileError && (
+              <div style={{
+                margin: "12px 20px 0",
+                padding: "10px 14px",
+                background: C.dangerTint,
+                border: `1px solid ${C.danger}`,
+                borderRadius: 6,
+                color: C.danger,
+                fontSize: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}>
+                
+                {profileError}
+              </div>
+            )}
+
+            <form onSubmit={handleProfileUpdate} style={{ padding: 16, display: "grid", gap: 14 }}>
+              <div>
+                <label style={labelStyle}>Full Name</label>
+                <input
+                  type="text"
+                  value={editProfileData.fullName}
+                  onChange={(e) => setEditProfileData(prev => ({ ...prev, fullName: e.target.value }))}
+                  style={inputStyle}
+                  placeholder="Enter your full name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Email</label>
+                <input
+                  type="email"
+                  value={editProfileData.email}
+                  style={{ ...inputStyle, background: "#f5f5f5", color: C.textSec, cursor: "not-allowed" }}
+                  disabled
+                />
+                <p style={{ fontSize: 9, color: C.textTer, marginTop: 2 }}>Email cannot be changed</p>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Phone Number</label>
+                <input
+                  type="tel"
+                  value={editProfileData.phone}
+                  onChange={(e) => setEditProfileData(prev => ({ ...prev, phone: e.target.value }))}
+                  style={inputStyle}
+                  placeholder="Enter your phone number"
+                />
+              </div>
+
+              <div style={{
+                display: "flex",
+                gap: 10,
+                justifyContent: "flex-end",
+                paddingTop: 12,
+                borderTop: `1px solid ${C.border}`,
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditProfile(false)}
+                  style={secondaryButtonStyle}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={primaryButtonStyle}  // ✅ This is now defined!
+                  disabled={profileSaving}
+                >
+                  {profileSaving ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {editingProperty ? (
         <EditProperty
@@ -590,15 +1000,15 @@ const headerStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: 16,
-  padding: "14px 32px",
+  gap: 12,
+  padding: "10px 24px",
   flexWrap: "wrap",
 };
 
 const brandIconStyle = {
-  width: 34,
-  height: 34,
-  borderRadius: 10,
+  width: 30,
+  height: 30,
+  borderRadius: 8,
   background: C.blue,
   color: "#fff",
   display: "grid",
@@ -608,27 +1018,25 @@ const brandIconStyle = {
 
 const navStyle = {
   display: "flex",
-  gap: 4,
+  gap: 2,
   flexWrap: "wrap",
   justifyContent: "center",
 };
 
 const navButtonStyle = (active, emphasized = false) => ({
   border: "none",
-  borderRadius: 8,
-  padding: "8px 16px",
-  cursor: "pointer",
+  borderRadius: 5,
+  padding: "4px 10px",
   background: emphasized ? C.text : active ? C.blueTint : "transparent",
   color: emphasized ? "#fff" : active ? C.blue : C.textSec,
   fontWeight: active || emphasized ? 600 : 500,
-  fontSize: 13,
+  fontSize: 10,
   transition: "all 0.15s",
 });
 
-
 const avatarStyle = {
-  width: 36,
-  height: 36,
+  width: 32,
+  height: 32,
   borderRadius: "50%",
   background: C.warnTint,
   color: C.warning,
@@ -636,24 +1044,24 @@ const avatarStyle = {
   placeItems: "center",
   fontWeight: 700,
   flexShrink: 0,
-  fontSize: 13,
+  fontSize: 11,
 };
 
 const panelStyle = {
   background: C.surface,
   border: `1px solid ${C.border}`,
-  borderRadius: 14,
-  padding: 24,
+  borderRadius: 12,
+  padding: 16,
 };
 
 const rowStyle = {
   border: `1px solid ${C.border}`,
-  borderRadius: 10,
-  padding: 16,
+  borderRadius: 8,
+  padding: 10,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: 12,
+  gap: 10,
   flexWrap: "wrap",
   background: "#FAFAF8",
   transition: "box-shadow 0.15s",
@@ -663,17 +1071,17 @@ const sectionHeaderStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: 12,
-  marginBottom: 20,
+  gap: 10,
+  marginBottom: 12,
   flexWrap: "wrap",
 };
 
 const listingCardStyle = {
   border: `1px solid ${C.border}`,
-  borderRadius: 10,
-  padding: 16,
+  borderRadius: 8,
+  padding: 12,
   display: "grid",
-  gap: 12,
+  gap: 8,
   background: "#FAFAF8",
   transition: "box-shadow 0.15s",
 };
@@ -682,7 +1090,7 @@ const listingTopRowStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: 12,
+  gap: 10,
   flexWrap: "wrap",
 };
 
@@ -690,19 +1098,18 @@ const listingBottomRowStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: 12,
+  gap: 10,
   flexWrap: "wrap",
 };
 
 const primaryActionButton = {
   border: "none",
-  borderRadius: 8,
-  padding: "10px 20px",
+  borderRadius: 6,
+  padding: "6px 14px",
   background: C.text,
   color: "#fff",
-  cursor: "pointer",
   fontWeight: 600,
-  fontSize: 13,
+  fontSize: 11,
   display: "flex",
   alignItems: "center",
   transition: "opacity 0.15s",
@@ -712,33 +1119,109 @@ const linkButtonStyle = {
   border: "none",
   background: "transparent",
   color: C.blue,
-  cursor: "pointer",
   fontWeight: 600,
-  fontSize: 13,
-  padding: "8px 12px",
+  fontSize: 11,
+  padding: "4px 8px",
   transition: "opacity 0.15s",
 };
 
 const ghostButtonStyle = {
   border: `1px solid ${C.border}`,
-  borderRadius: 6,
-  padding: "6px 16px",
+  borderRadius: 5,
+  padding: "4px 12px",
   background: "#fff",
   color: C.text,
-  cursor: "pointer",
-  fontSize: 12,
+  fontSize: 10,
   fontWeight: 500,
   transition: "all 0.15s",
 };
 
 const dangerGhostButtonStyle = {
   border: `1px solid ${C.danger}`,
-  borderRadius: 6,
-  padding: "6px 16px",
+  borderRadius: 5,
+  padding: "4px 12px",
   background: "#fff",
   color: C.danger,
-  cursor: "pointer",
-  fontSize: 12,
+  fontSize: 10,
   fontWeight: 500,
+  transition: "all 0.15s",
+};
+
+
+const overlayStyle = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.45)",
+  zIndex: 1000,
+  display: "grid",
+  placeItems: "center",
+  padding: 16,
+};
+
+const modalStyle = {
+  width: "100%",
+  maxWidth: 420,
+  maxHeight: "90vh",
+  overflowY: "auto",
+  background: C.surface,
+  borderRadius: 12,
+  boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+};
+
+const closeButtonStyle = {
+  border: "none",
+  background: "transparent",
+  color: C.textSec,
+  cursor: "pointer",
+  padding: 4,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const labelStyle = {
+  display: "block",
+  marginBottom: 4,
+  fontSize: 11,
+  fontWeight: 600,
+  color: C.text,
+};
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  border: `1px solid ${C.borderMid}`,
+  borderRadius: 6,
+  padding: "8px 12px",
+  fontSize: 12,
+  fontFamily: "inherit",
+  color: C.text,
+  background: "#fff",
+  transition: "border-color 0.15s",
+  outline: "none",
+};
+
+// ✅ The missing primaryButtonStyle is now defined here!
+const primaryButtonStyle = {
+  padding: "8px 20px",
+  border: "none",
+  borderRadius: 6,
+  background: C.text,
+  color: "#fff",
+  cursor: "pointer",
+  fontWeight: 600,
+  fontSize: 11,
+  transition: "opacity 0.15s",
+};
+
+const secondaryButtonStyle = {
+  padding: "8px 16px",
+  border: `1px solid ${C.border}`,
+  borderRadius: 6,
+  background: "#fff",
+  color: C.text,
+  cursor: "pointer",
+  fontWeight: 500,
+  fontSize: 11,
   transition: "all 0.15s",
 };

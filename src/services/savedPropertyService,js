@@ -1,0 +1,93 @@
+
+export async function saveProperty(propertyId) {
+  try {
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    const email = userData.email;
+    
+    if (!email) {
+      throw new Error('Please log in first');
+    }
+
+    const response = await fetch('/api/saved-properties', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Email': email,
+      },
+      body: JSON.stringify({ propertyId }),
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    const data = contentType.includes("application/json")
+      ? await response.json()
+      : { message: await response.text() };
+
+    if (!response.ok) {
+      throw new Error(data?.message || "Unable to save property.");
+    }
+
+    return data;
+  } catch (error) {
+    console.error(' Error saving property:', error);
+    throw error;
+  }
+}
+
+export async function unsaveProperty(propertyId) {
+  try {
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    const email = userData.email;
+    
+    if (!email) {
+      throw new Error('Please log in first');
+    }
+
+    const response = await fetch(`/api/saved-properties/${propertyId}`, {
+      method: 'DELETE',
+      headers: {
+        'X-User-Email': email,
+      },
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    const data = contentType.includes("application/json")
+      ? await response.json()
+      : { message: await response.text() };
+
+    if (!response.ok) {
+      throw new Error(data?.message || "Unable to unsave property.");
+    }
+
+    return data;
+  } catch (error) {
+    console.error(' Error unsaving property:', error);
+    throw error;
+  }
+}
+
+export async function checkSavedStatus(propertyId) {
+  try {
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    const email = userData.email;
+    
+    if (!email) {
+      return false;
+    }
+
+    const response = await fetch(`/api/saved-properties/${propertyId}/check`, {
+      headers: {
+        'X-User-Email': email,
+      },
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const data = await response.json();
+    return data.saved || false;
+  } catch (error) {
+    console.error('Error checking saved status:', error);
+    return false;
+  }
+}

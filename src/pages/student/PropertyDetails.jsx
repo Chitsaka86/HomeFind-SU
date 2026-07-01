@@ -6,11 +6,14 @@ import {
   HomeModernIcon,
   MapPinIcon,
   XMarkIcon,
+  HeartIcon,
 } from "@heroicons/react/24/outline";
 import PropertyMap from "../../components/maps/PropertyMap.jsx";
 import { Badge, C, Stars } from "./studentUi.jsx";
+import { saveProperty, unsaveProperty, checkSavedStatus } from "../../services/savedPropertiesService.js";
+import { createBookingRequest } from "../../services/bookingService.js";
 
-export default function PropertyDetails({ property, onClose }) {
+export default function PropertyDetails({ property, onClose, onSavedChange, onBookingChange }) {
   const [bookingType, setBookingType] = useState("viewing");
   const [selectedDate, setSelectedDate] = useState("");
   const [showCalendar, setShowCalendar] = useState(false);
@@ -22,11 +25,35 @@ export default function PropertyDetails({ property, onClose }) {
   const [time, setTime] = useState("10:00");
   const [note, setNote] = useState("");
   const [booked, setBooked] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingError, setBookingError] = useState("");
 
+  const propertyId = [property?.id, property?.property_id, property?.propertyId]
+    .find((value) => value !== undefined && value !== null && value !== '')
+    ?.toString()
+    .trim();
   const propertyImages = Array.isArray(property.images) ? property.images : [];
   const thumbnailImages = propertyImages.slice(0, 4);
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  // Check if property is saved
+  useEffect(() => {
+    const checkSaved = async () => {
+      try {
+        const userData = JSON.parse(localStorage.getItem('user') || '{}');
+        if (userData.email && propertyId) {
+          const saved = await checkSavedStatus(propertyId);
+          setIsSaved(saved);
+        }
+      } catch (error) {
+        console.error('Error checking saved status:', error);
+      }
+    };
+    checkSaved();
+  }, [propertyId]);
 
   useEffect(() => {
     setActiveImageIndex(0);
@@ -40,6 +67,37 @@ export default function PropertyDetails({ property, onClose }) {
       }
     }
   }, [selectedDate]);
+
+  
+  const handleToggleSave = async () => {
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!userData.email) {
+      alert('Please log in to save properties');
+      return;
+    }
+
+    if (!propertyId) {
+      alert('This property cannot be saved right now.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (isSaved) {
+        await unsaveProperty(propertyId);
+        setIsSaved(false);
+      } else {
+        await saveProperty(propertyId);
+        setIsSaved(true);
+      }
+      onSavedChange?.();
+    } catch (error) {
+      console.error('Error toggling save:', error);
+      alert(error instanceof Error ? error.message : 'Failed to save property. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const calendarYear = calendarMonth.getFullYear();
   const calendarIndex = calendarMonth.getMonth();
@@ -96,7 +154,8 @@ export default function PropertyDetails({ property, onClose }) {
 
         <div style={{ display: "flex", gap: 0 }}>
           <div className="hide-scrollbar" style={{ flex: 3, padding: 20, borderRight: `1px solid ${C.border}`, overflowY: "auto" }}>
-            <div style={{ height: 240, borderRadius: 10, overflow: "hidden", background: "linear-gradient(135deg,#E6F1FB,#C8DFF5)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+            {/* Image Gallery */}
+            <div style={{ height: 240, borderRadius: 10, overflow: "hidden", background: "linear-gradient(135deg,#E6F1FB,#C8DFF5)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, position: "relative" }}>
               {propertyImages[activeImageIndex]?.url ? (
                 <img
                   src={propertyImages[activeImageIndex].url}
@@ -106,7 +165,41 @@ export default function PropertyDetails({ property, onClose }) {
               ) : (
                 <HomeModernIcon style={{ width: 60, height: 60, color: C.blue }} />
               )}
+              {/* ✅ Save Button on Image */}
+              <button
+                onClick={handleToggleSave}
+                disabled={saving}
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  background: "rgba(255,255,255,0.95)",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: 40,
+                  height: 40,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"}
+                onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+              >
+                <HeartIcon 
+                  style={{ 
+                    width: 22, 
+                    height: 22, 
+                    color: isSaved ? C.danger : C.textSec,
+                    fill: isSaved ? C.danger : 'none',
+                    transition: 'all 0.15s',
+                  }} 
+                />
+              </button>
             </div>
+            
             {thumbnailImages.length > 0 ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))", gap: 6, marginBottom: 16 }}>
                 {thumbnailImages.map((image, index) => (
@@ -133,6 +226,7 @@ export default function PropertyDetails({ property, onClose }) {
                 ))}
               </div>
             ) : null}
+
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
               <div>
                 <p style={{ fontSize: 17, fontWeight: 700, margin: "0 0 3px", color: C.text }}>{property.title}</p>
@@ -166,28 +260,32 @@ export default function PropertyDetails({ property, onClose }) {
             <p style={{ fontSize: 13, fontWeight: 700, margin: "0 0 8px", color: C.text }}>Landlord</p>
             <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 14 }}>
               <div style={{ width: 36, height: 36, borderRadius: "50%", background: C.warnTint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: C.warning, flexShrink: 0 }}>
-                {property.landlord.name.split(" ").map((word) => word[0]).join("").slice(0, 2)}
+                {property.landlord?.name?.split(" ").map((word) => word[0]).join("").slice(0, 2)}
               </div>
               <div>
-                <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: C.text }}>{property.landlord.name}</p>
-                <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>{property.landlord.listings} listings · Verified landlord</p>
+                <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: C.text }}>{property.landlord?.name}</p>
+                <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>{property.landlord?.listings} listings · {property.landlord?.verified ? 'Verified landlord' : 'Landlord'}</p>
               </div>
-              <span style={{ marginLeft: "auto", color: C.green, fontSize: 16 }}>✓</span>
+              {property.landlord?.verified && <span style={{ marginLeft: "auto", color: C.green, fontSize: 16 }}>✓</span>}
             </div>
             <p style={{ fontSize: 13, fontWeight: 700, margin: "0 0 8px", color: C.text }}>Reviews</p>
-            {property.reviewList.map((review, index) => (
-              <div key={index} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: C.blueTint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: C.blue }}>
-                    {review.name.split(" ").map((word) => word[0]).join("").slice(0, 2)}
+            {property.reviewList?.length > 0 ? (
+              property.reviewList.map((review, index) => (
+                <div key={index} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: "50%", background: C.blueTint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: C.blue }}>
+                      {review.name?.split(" ").map((word) => word[0]).join("").slice(0, 2)}
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{review.name}</span>
+                    <span style={{ fontSize: 10, color: C.textTer }}>{review.date}</span>
+                    <Stars rating={review.rating} />
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{review.name}</span>
-                  <span style={{ fontSize: 10, color: C.textTer }}>{review.date}</span>
-                  <Stars rating={review.rating} />
+                  <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>{review.comment}</p>
                 </div>
-                <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>{review.comment}</p>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p style={{ fontSize: 12, color: C.textSec }}>No reviews yet</p>
+            )}
           </div>
 
           <div className="hide-scrollbar" style={{ flex: 2, padding: 20, minWidth: 260, overflowY: "auto" }}>
@@ -214,7 +312,39 @@ export default function PropertyDetails({ property, onClose }) {
               </div>
             ) : (
               <>
-                <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: "0 0 16px" }}>Book this property</p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>Book this property</p>
+                  {/* ✅ Save button in booking section */}
+                  <button
+                    onClick={handleToggleSave}
+                    disabled={saving}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = C.blueTint}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                  >
+                    <HeartIcon 
+                      style={{ 
+                        width: 20, 
+                        height: 20, 
+                        color: isSaved ? C.danger : C.textSec,
+                        fill: isSaved ? C.danger : 'none',
+                      }} 
+                    />
+                    <span style={{ fontSize: 12, color: isSaved ? C.danger : C.textSec }}>
+                      {isSaved ? 'Saved' : 'Save'}
+                    </span>
+                  </button>
+                </div>
                 <label style={{ fontSize: 11, color: C.textSec, display: "block", marginBottom: 6 }}>Booking type</label>
                 <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
                   {[
@@ -398,8 +528,51 @@ export default function PropertyDetails({ property, onClose }) {
                     </div>
                   </div>
                 )}
-                <button onClick={() => { if (selectedDate) setBooked(true); }} style={{ width: "100%", background: selectedDate ? C.text : "#ccc", color: "#fff", border: "none", borderRadius: 8, height: 40, fontSize: 13, fontWeight: 700, cursor: selectedDate ? "pointer" : "not-allowed", marginBottom: 8, transition: "opacity 0.15s" }}>Confirm booking</button>
-                <button style={{ width: "100%", background: "transparent", color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, height: 36, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>♡ Save to favourites</button>
+                {bookingError ? <p style={{ fontSize: 12, color: C.danger, margin: "0 0 8px" }}>{bookingError}</p> : null}
+                <button
+                  onClick={async () => {
+                    if (!selectedDate) return;
+
+                    const userData = JSON.parse(localStorage.getItem("user") || "{}");
+                    if (!userData.email) {
+                      alert("Please log in to book a property");
+                      return;
+                    }
+
+                    setBookingLoading(true);
+                    setBookingError("");
+                    try {
+                      const normalizedPropertyId = [property?.id, property?.property_id, property?.propertyId]
+                        .find((value) => value !== undefined && value !== null && value !== "")
+                        ?.toString()
+                        .trim();
+
+                      if (!normalizedPropertyId) {
+                        throw new Error("This property is missing a valid id.");
+                      }
+
+                      await createBookingRequest({
+                        propertyId: normalizedPropertyId,
+                        bookingDate: selectedDate,
+                        bookingTime: time,
+                        type: bookingType === "reservation" ? "reservation" : "viewing",
+                        message: note,
+                      });
+
+                      setBooked(true);
+                      onBookingChange?.();
+                    } catch (error) {
+                      console.error("Error creating booking:", error);
+                      setBookingError(error instanceof Error ? error.message : "Unable to create booking request.");
+                    } finally {
+                      setBookingLoading(false);
+                    }
+                  }}
+                  disabled={!selectedDate || bookingLoading}
+                  style={{ width: "100%", background: selectedDate && !bookingLoading ? C.text : "#ccc", color: "#fff", border: "none", borderRadius: 8, height: 40, fontSize: 13, fontWeight: 700, cursor: selectedDate && !bookingLoading ? "pointer" : "not-allowed", marginBottom: 8, transition: "opacity 0.15s" }}
+                >
+                  {bookingLoading ? "Creating request..." : "Confirm booking"}
+                </button>
               </>
             )}
           </div>

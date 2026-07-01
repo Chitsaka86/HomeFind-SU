@@ -12,7 +12,7 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-async function getLandlordRow(landlordId) {
+async function getLandlordRow(landlordId, email) {
   if (landlordId) {
     const result = await pool.query(
       `
@@ -32,6 +32,28 @@ async function getLandlordRow(landlordId) {
 
     if (result.rows[0]) {
       return result.rows[0];
+    }
+  }
+
+  if (email) {
+    const byEmail = await pool.query(
+      `
+        SELECT
+          l.landlord_id,
+          l.full_name,
+          l.phone,
+          l.user_id,
+          u.email
+        FROM landlords l
+        LEFT JOIN users u ON u.user_id = l.user_id
+        WHERE u.email = $1
+        LIMIT 1
+      `,
+      [email]
+    );
+
+    if (byEmail.rows[0]) {
+      return byEmail.rows[0];
     }
   }
 
@@ -56,7 +78,8 @@ async function getLandlordRow(landlordId) {
 export const getLandlordDashboard = async (req, res) => {
   try {
     const landlordId = req.query.landlordId || null;
-    const landlord = await getLandlordRow(landlordId);
+    const email = req.query.email || null;
+    const landlord = await getLandlordRow(landlordId, email);
 
     if (!landlord) {
       return res.status(404).json({ message: "Landlord profile not found." });

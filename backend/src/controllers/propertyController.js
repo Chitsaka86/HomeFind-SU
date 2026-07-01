@@ -131,7 +131,15 @@ export const getProperties = async (_req, res) => {
 			reviewList: Array.isArray(row.review_list) ? row.review_list : [],
 			imageUrl: row.image_url || "",
 			propertyType: row.property_type || "",
-				images: Array.isArray(row.images) ? row.images : [],
+			images: Array.isArray(row.images)
+				? row.images
+					.filter((image) => image && typeof image === 'object' && image.url)
+					.map((image) => ({
+						url: image.url,
+						caption: image.caption || '',
+						sortOrder: image.sortOrder ?? image.sort_order ?? 0,
+					}))
+				: [],
 		}));
 
 		return res.status(200).json({

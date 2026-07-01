@@ -6,6 +6,9 @@ import {
   HomeModernIcon,
   MagnifyingGlassIcon,
   MapPinIcon,
+  CalendarDaysIcon,
+  CheckCircleIcon,
+  HeartIcon,
 } from "@heroicons/react/24/outline";
 import { fetchProperties } from "../../services/propertyServices";
 import { fetchStudentDashboard } from "../../services/studentDashboardService";
@@ -93,12 +96,218 @@ const Stars = ({ rating }) => {
   );
 };
 
-const Navbar = ({ activePage, setPage, userName }) => {
+// ✅ Stat Card Component
+const StatCard = ({ label, value, icon, tone = "text" }) => {
+  const colors = {
+    text: { bg: C.blueTint, color: C.blue },
+    warning: { bg: C.warnTint, color: C.warning },
+    green: { bg: C.greenTint, color: C.green },
+  };
+
+  return (
+    <div style={{ 
+      background: C.surface, 
+      border: `1px solid ${C.border}`, 
+      borderRadius: 10, 
+      padding: 14,
+      textAlign: "center",
+    }}>
+      <div style={{
+        width: 36,
+        height: 36,
+        borderRadius: "50%",
+        background: colors[tone]?.bg || C.blueTint,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        margin: "0 auto 6px",
+        color: colors[tone]?.color || C.blue,
+      }}>
+        {icon}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: C.text }}>{value}</div>
+      <div style={{ fontSize: 11, color: C.textSec }}>{label}</div>
+    </div>
+  );
+};
+
+const RecentActivity = ({ bookings, savedProperties }) => {
+  const activities = [];
+  
+  bookings.forEach(booking => {
+    activities.push({
+      id: `booking-${booking.id}`,
+      message: `You booked a viewing for ${booking.property}`,
+      time: booking.date || 'Recently',
+      icon: '',
+      type: 'booking'
+    });
+  });
+  
+  savedProperties.forEach(prop => {
+    activities.push({
+      id: `saved-${prop.id}`,
+      message: `You saved ${prop.title}`,
+      time: 'Recently',
+      icon: '',
+      type: 'saved'
+    });
+  });
+  
+  activities.sort((a, b) => {
+    if (a.time === 'Recently') return 1;
+    if (b.time === 'Recently') return -1;
+    return new Date(b.time) - new Date(a.time);
+  });
+  
+  return (
+    <div style={{
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 12,
+      padding: 16,
+    }}>
+      <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: C.text }}>
+        Recent Activity
+      </h3>
+      {activities.length > 0 ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          {activities.slice(0, 5).map((activity) => (
+            <div key={activity.id} style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 12px",
+              background: "#FAFAF8",
+              borderRadius: 8,
+              border: `1px solid ${C.border}`,
+            }}>
+              <span style={{ fontSize: 18 }}>{activity.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: C.text }}>{activity.message}</div>
+                <div style={{ fontSize: 10, color: C.textTer }}>{activity.time}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style={{ fontSize: 12, color: C.textSec, textAlign: "center", padding: "16px 0" }}>
+          No recent activity. Start exploring properties!
+        </p>
+      )}
+    </div>
+  );
+};
+
+
+const RecommendedProperties = ({ properties, savedProperties, onView }) => {
+  const savedLocations = savedProperties.map(p => p.location || '');
+  
+  const recommendations = properties
+    .filter(p => 
+      p.status !== "pending" && 
+      savedLocations.some(loc => loc && p.location && p.location.includes(loc)) && 
+      !savedProperties.some(sp => sp.id === p.id)
+    )
+    .slice(0, 3);
+  
+  if (recommendations.length === 0) return null;
+  
+  return (
+    <div style={{
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 12,
+      padding: 16,
+    }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 12,
+      }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: C.text }}>🌟 Recommended for You</h3>
+          <p style={{ fontSize: 11, color: C.textSec, margin: "2px 0 0" }}>Based on your saved properties</p>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
+        {recommendations.map(property => (
+          <div key={property.id} style={{
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            padding: 10,
+            background: "#FAFAF8",
+            cursor: "pointer",
+            transition: "all 0.15s",
+          }}
+          onClick={() => onView(property)}
+          onMouseEnter={(e) => e.currentTarget.style.borderColor = C.blue}
+          onMouseLeave={(e) => e.currentTarget.style.borderColor = C.border}
+          >
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{property.title}</div>
+            <div style={{ fontSize: 10, color: C.textSec }}>KSh {property.price?.toLocaleString() || 0}/mo</div>
+            <div style={{ fontSize: 9, color: C.textTer }}>{property.location}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
+const RecentlyViewed = ({ properties, onView }) => {
+  if (properties.length === 0) return null;
+  
+  return (
+    <div style={{
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 12,
+      padding: 16,
+    }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 12,
+      }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: C.text }}>🕐 Recently Viewed</h3>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 10, overflowX: "auto", padding: "4px 0" }}>
+        {properties.map(property => (
+          <div key={property.id} style={{
+            minWidth: 130,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            padding: 10,
+            cursor: "pointer",
+            flexShrink: 0,
+            transition: "all 0.15s",
+            background: "#FAFAF8",
+          }}
+          onClick={() => onView(property)}
+          onMouseEnter={(e) => e.currentTarget.style.borderColor = C.blue}
+          onMouseLeave={(e) => e.currentTarget.style.borderColor = C.border}
+          >
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.text }}>{property.title}</div>
+            <div style={{ fontSize: 9, color: C.textSec }}>KSh {property.price?.toLocaleString() || 0}</div>
+            <div style={{ fontSize: 8, color: C.textTer }}>{property.location}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const Navbar = ({ activePage, setPage, userName, savedCount }) => {
   const displayName = userName || JSON.parse(localStorage.getItem('user') || '{}').name || "Student";
   
   const navItems = [
     { id: "dashboard", label: "Dashboard" },
-    { id: "bookings", label: "My bookings" },
+    { id: "bookings", label: "Bookings" },
     { id: "saved", label: "Saved" },
     { id: "profile", label: "Profile" },
   ];
@@ -136,43 +345,58 @@ const Navbar = ({ activePage, setPage, userName }) => {
         <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>HomeFind SU</span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setPage(item.id)}
-            style={{
-              background: activePage === item.id ? C.blueTint : "transparent",
-              color: activePage === item.id ? C.blue : C.textSec,
-              border: "none",
-              borderRadius: 6,
-              padding: "5px 12px",
-              fontSize: 13,
-              fontWeight: activePage === item.id ? 600 : 400,
-              cursor: "pointer",
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setPage(item.id)}
+              style={{
+                background: activePage === item.id ? C.blueTint : "transparent",
+                color: activePage === item.id ? C.blue : C.textSec,
+                border: "none",
+                borderRadius: 6,
+                padding: "5px 12px",
+                fontSize: 13,
+                fontWeight: activePage === item.id ? 600 : 400,
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              {item.label}
+              {item.id === "saved" && savedCount > 0 && (
+                <span style={{
+                  background: C.blue,
+                  color: "#fff",
+                  fontSize: 9,
+                  borderRadius: "50%",
+                  padding: "1px 6px",
+                  marginLeft: 4,
+                }}>
+                  {savedCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
 
-      <div
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
-          background: C.blueTint,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: C.blue,
-          fontSize: 13,
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
-        {displayName.split(" ").map((word) => word[0]).join("").slice(0, 2)}
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: C.blueTint,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: C.blue,
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          {displayName.split(" ").map((word) => word[0]).join("").slice(0, 2)}
+        </div>
       </div>
     </nav>
   );
@@ -288,78 +512,108 @@ const FilterSidebar = ({ filters, setFilters }) => {
   );
 };
 
-const PropertyCard = ({ property, onView }) => (
-  <div
-    style={{
-      background: C.surface,
-      border: `1px solid ${C.border}`,
-      borderRadius: 12,
-      overflow: "hidden",
-      display: "flex",
-      flexDirection: "column",
-      transition: "box-shadow 0.18s",
-    }}
-    onMouseEnter={(event) => (event.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.10)")}
-    onMouseLeave={(event) => (event.currentTarget.style.boxShadow = "none")}
-  >
+const PropertyCard = ({ property, onView }) => {
+  const isAvailable = property.status === "available" || property.status === "Available";
+  
+  return (
     <div
       style={{
-        height: 110,
-        background: "linear-gradient(135deg, #E6F1FB 0%, #D0E8F8 100%)",
+        background: C.surface,
+        border: `1px solid ${C.border}`,
+        borderRadius: 12,
+        overflow: "hidden",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 36,
-        position: "relative",
+        flexDirection: "column",
+        transition: "box-shadow 0.18s",
       }}
+      onMouseEnter={(event) => (event.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.10)")}
+      onMouseLeave={(event) => (event.currentTarget.style.boxShadow = "none")}
     >
-      <HomeModernIcon style={{ width: 34, height: 34, color: C.blue }} />
-      <div style={{ position: "absolute", bottom: 8, right: 8 }}>
-        <Badge variant={property.status === "Available" ? "success" : "warning"}>{property.status}</Badge>
-      </div>
-    </div>
-
-    <div style={{ padding: "10px 12px", flex: 1, display: "flex", flexDirection: "column" }}>
-      <p style={{ fontSize: 12, fontWeight: 700, margin: "0 0 3px", color: C.text }}>{property.title}</p>
-      <p style={{ fontSize: 11, color: C.textSec, margin: "0 0 4px" }}>
-        <MapPinIcon style={{ width: 12, height: 12, display: "inline-block", marginRight: 4, verticalAlign: "-2px" }} />
-        {property.location} · {property.distance} km
-      </p>
-      <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: "0 0 4px" }}>
-        KSh {property.price.toLocaleString()}
-        <span style={{ fontSize: 10, fontWeight: 400, color: C.textSec }}>/mo</span>
-      </p>
-      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 10 }}>
-        <Stars rating={property.rating} />
-        <span style={{ fontSize: 10, color: C.textSec }}>{property.rating} ({property.reviews})</span>
-      </div>
-      <button
-        onClick={() => onView(property)}
+      <div
         style={{
-          marginTop: "auto",
-          background: C.text,
-          color: "#fff",
-          border: "none",
-          borderRadius: 7,
-          padding: "7px 0",
-          fontSize: 12,
-          fontWeight: 600,
-          cursor: "pointer",
-          width: "100%",
-          transition: "opacity 0.15s",
+          height: 110,
+          background: "linear-gradient(135deg, #E6F1FB 0%, #D0E8F8 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 36,
+          position: "relative",
         }}
-        onMouseEnter={(event) => (event.currentTarget.style.opacity = "0.85")}
-        onMouseLeave={(event) => (event.currentTarget.style.opacity = "1")}
       >
-        View details
-      </button>
-    </div>
-  </div>
-);
+        {/* Status Indicator */}
+        <div style={{ 
+          position: "absolute", 
+          top: 8, 
+          left: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          background: "rgba(255,255,255,0.9)",
+          padding: "2px 8px",
+          borderRadius: 4,
+        }}>
+          <span style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: isAvailable ? C.green : C.warning,
+            display: "inline-block",
+          }} />
+          <span style={{
+            fontSize: 9,
+            fontWeight: 600,
+            color: isAvailable ? C.green : C.warning,
+          }}>
+            {isAvailable ? "Available" : "Booked"}
+          </span>
+        </div>
+        
+        <HomeModernIcon style={{ width: 34, height: 34, color: C.blue }} />
+        <div style={{ position: "absolute", bottom: 8, right: 8 }}>
+          <Badge variant={isAvailable ? "success" : "warning"}>{property.status}</Badge>
+        </div>
+      </div>
 
-const DashboardPage = ({ onView, properties, loading, error }) => {
-  const [search, setSearch] = useState("");
-  const [maxPriceInput, setMaxPriceInput] = useState("");
+      <div style={{ padding: "10px 12px", flex: 1, display: "flex", flexDirection: "column" }}>
+        <p style={{ fontSize: 12, fontWeight: 700, margin: "0 0 3px", color: C.text }}>{property.title}</p>
+        <p style={{ fontSize: 11, color: C.textSec, margin: "0 0 4px" }}>
+          <MapPinIcon style={{ width: 12, height: 12, display: "inline-block", marginRight: 4, verticalAlign: "-2px" }} />
+          {property.location} · {property.distance} km
+        </p>
+        <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: "0 0 4px" }}>
+          KSh {property.price.toLocaleString()}
+          <span style={{ fontSize: 10, fontWeight: 400, color: C.textSec }}>/mo</span>
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 10 }}>
+          <Stars rating={property.rating} />
+          <span style={{ fontSize: 10, color: C.textSec }}>{property.rating} ({property.reviews})</span>
+        </div>
+        <button
+          onClick={() => onView(property)}
+          style={{
+            marginTop: "auto",
+            background: C.text,
+            color: "#fff",
+            border: "none",
+            borderRadius: 7,
+            padding: "7px 0",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            width: "100%",
+            transition: "opacity 0.15s",
+          }}
+          onMouseEnter={(event) => (event.currentTarget.style.opacity = "0.85")}
+          onMouseLeave={(event) => (event.currentTarget.style.opacity = "1")}
+        >
+          View details
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const DashboardPage = ({ onView, properties, loading, error, setMaxPriceInput, maxPriceInput, search, setSearch }) => {
   const [filters, setFilters] = useState({ maxPrice: 100000, amenities: [], status: [] });
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [locationSuggestions, setLocationSuggestions] = useState([]);
@@ -370,7 +624,12 @@ const DashboardPage = ({ onView, properties, loading, error }) => {
   const searchQuery = search.trim();
   const searchLocationQuery = searchQuery.toLowerCase().split(",")[0].trim();
 
+  
   const filteredProperties = properties.filter((property) => {
+    if (property.status === "pending" || property.status === "Pending") {
+      return false;
+    }
+
     if (
       search &&
       !property.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -677,14 +936,9 @@ const DashboardPage = ({ onView, properties, loading, error }) => {
             </div>
           ) : filteredProperties.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 0", color: C.textSec }}>
-              <HomeModernIcon style={{ width: 60, height: 60, marginBottom: 16, color: C.textTer }} />
-              <p style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px", color: C.text }}>No properties available</p>
-              <p style={{ fontSize: 14, margin: "0 0 4px", color: C.textSec }}>
-                There are currently no properties listed in the database.
-              </p>
-              <p style={{ fontSize: 13, color: C.textTer }}>
-                Check back later or contact the administrator.
-              </p>
+              <MagnifyingGlassIcon style={{ width: 40, height: 40, marginBottom: 12, color: C.textSec }} />
+              <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 6px", color: C.text }}>No properties found</p>
+              <p style={{ fontSize: 12, margin: 0 }}>Try adjusting your filters or search term.</p>
             </div>
           ) : (
             <div
@@ -695,7 +949,7 @@ const DashboardPage = ({ onView, properties, loading, error }) => {
               }}
             >
               {filteredProperties.map((property) => (
-                <PropertyCard key={property.id || property.property_id || `property-${Math.random()}`} property={property} onView={onView} />
+                <PropertyCard key={property.id} property={property} onView={onView} />
               ))}
             </div>
           )}
@@ -703,6 +957,14 @@ const DashboardPage = ({ onView, properties, loading, error }) => {
       </div>
     </div>
   );
+};
+
+
+const getTimeBasedGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 };
 
 export default function StudentDashboard() {
@@ -714,6 +976,9 @@ export default function StudentDashboard() {
   const [studentData, setStudentData] = useState({ student: null, bookings: [], savedProperties: [] });
   const [studentLoading, setStudentLoading] = useState(true);
   const [studentError, setStudentError] = useState("");
+  const [search, setSearch] = useState("");
+  const [maxPriceInput, setMaxPriceInput] = useState("");
+  const [recentlyViewed, setRecentlyViewed] = useState([]);
 
   useEffect(() => {
     let isActive = true;
@@ -744,7 +1009,6 @@ export default function StudentDashboard() {
     };
   }, []);
 
-  
   useEffect(() => {
     let isActive = true;
 
@@ -752,20 +1016,8 @@ export default function StudentDashboard() {
       try {
         setStudentLoading(true);
         setStudentError("");
-        
-        
         const userData = JSON.parse(localStorage.getItem('user') || '{}');
-        console.log(' Loading dashboard for:', userData.email);
-        
-        if (!userData.email) {
-          setStudentError("No email found. Please log in again.");
-          setStudentLoading(false);
-          return;
-        }
-        
-       
         const data = await fetchStudentDashboard(userData.email);
-        
         if (isActive) {
           setStudentData({
             student: data.student || null,
@@ -775,8 +1027,6 @@ export default function StudentDashboard() {
         }
       } catch (loadError) {
         if (isActive) {
-          console.warn(' API error, using localStorage data:', loadError.message);
-          
           const userData = JSON.parse(localStorage.getItem('user') || '{}');
           setStudentData({
             student: {
@@ -796,7 +1046,6 @@ export default function StudentDashboard() {
       }
     };
 
-    
     loadStudentDashboard();
 
     return () => {
@@ -804,7 +1053,36 @@ export default function StudentDashboard() {
     };
   }, []);
 
+  const refreshStudentDashboard = async () => {
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!userData.email) {
+      return;
+    }
+
+    try {
+      const data = await fetchStudentDashboard(userData.email);
+      setStudentData((prev) => ({
+        ...prev,
+        bookings: Array.isArray(data?.bookings) ? data.bookings : [],
+        savedProperties: Array.isArray(data?.savedProperties) ? data.savedProperties : [],
+      }));
+    } catch (error) {
+      console.error('Error refreshing student dashboard:', error);
+    }
+  };
+
   const currentStudentName = studentData.student?.fullName || "Student";
+  const savedCount = studentData.savedProperties?.length || 0;
+  const confirmedBookings = studentData.bookings?.filter(b => b.status === 'confirmed' || b.status === 'Confirmed').length || 0;
+  const availableProperties = properties.filter(p => p.status !== "pending" && p.status !== "Pending").length || 0;
+
+  const handleViewProperty = (property) => {
+    setSelectedProperty(property);
+    setRecentlyViewed(prev => {
+      const filtered = prev.filter(p => p.id !== property.id);
+      return [property, ...filtered].slice(0, 5);
+    });
+  };
 
   return (
     <div
@@ -816,18 +1094,113 @@ export default function StudentDashboard() {
         flexDirection: "column",
       }}
     >
-      <Navbar activePage={page} setPage={setPage} userName={currentStudentName} />
+      <Navbar activePage={page} setPage={setPage} userName={currentStudentName} savedCount={savedCount} />
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: 20 }}>
         {page === "dashboard" && (
-          <DashboardPage onView={(property) => setSelectedProperty(property)} properties={properties} loading={loading} error={error} />
+          <div style={{ display: "grid", gap: 16 }}>
+            {/* Welcome Message with Time */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 10,
+              background: C.surface,
+              border: `1px solid ${C.border}`,
+              borderRadius: 12,
+              padding: 16,
+            }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.text }}>
+                  {getTimeBasedGreeting()}, {studentData.student?.fullName || "Student"}! 👋
+                </h1>
+                <p style={{ margin: "4px 0 0", fontSize: 13, color: C.textSec }}>
+                  {availableProperties} properties available near Strathmore
+                </p>
+              </div>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}>
+                <span style={{
+                  background: C.blueTint,
+                  color: C.blue,
+                  padding: "4px 12px",
+                  borderRadius: 9999,
+                  fontSize: 11,
+                  fontWeight: 600,
+                }}>
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 12 }}>
+              <StatCard 
+                label="Available Properties" 
+                value={availableProperties} 
+                icon={<HomeModernIcon style={{ width: 18, height: 18 }} />}
+                tone="text"
+              />
+              <StatCard 
+                label="My Bookings" 
+                value={studentData.bookings?.length || 0} 
+                icon={<CalendarDaysIcon style={{ width: 18, height: 18 }} />}
+                tone="text"
+              />
+              <StatCard 
+                label="Confirmed" 
+                value={confirmedBookings} 
+                icon={<CheckCircleIcon style={{ width: 18, height: 18 }} />}
+                tone="green"
+              />
+              <StatCard 
+                label="Saved" 
+                value={savedCount} 
+                icon={<HeartIcon style={{ width: 18, height: 18 }} />}
+                tone="warning"
+              />
+            </div>
+
+            {/* Dashboard Page */}
+            <DashboardPage 
+              onView={handleViewProperty} 
+              properties={properties} 
+              loading={loading} 
+              error={error}
+              search={search}
+              setSearch={setSearch}
+              maxPriceInput={maxPriceInput}
+              setMaxPriceInput={setMaxPriceInput}
+            />
+
+            {/* Recently Viewed */}
+            <RecentlyViewed properties={recentlyViewed} onView={setSelectedProperty} />
+
+            {/* Recommended Properties */}
+            <RecommendedProperties 
+              properties={properties} 
+              savedProperties={studentData.savedProperties} 
+              onView={setSelectedProperty} 
+            />
+
+            {/* Recent Activity */}
+            <RecentActivity 
+              bookings={studentData.bookings} 
+              savedProperties={studentData.savedProperties} 
+            />
+          </div>
         )}
+        
         {page === "bookings" && <MyBookings bookings={studentData.bookings} loading={studentLoading} error={studentError} />}
-        {page === "saved" && <SavedProperties onView={(property) => setSelectedProperty(property)} savedProperties={studentData.savedProperties} loading={studentLoading} error={studentError} />}
+        {page === "saved" && <SavedProperties onView={(property) => setSelectedProperty(property)} savedProperties={studentData.savedProperties} loading={studentLoading} error={studentError} onRefresh={refreshStudentDashboard} />}
         {page === "profile" && <StudentProfile setPage={setPage} student={studentData.student} loading={studentLoading} error={studentError} />}
       </div>
 
-      {selectedProperty && <PropertyDetails property={selectedProperty} onClose={() => setSelectedProperty(null)} />}
+      {selectedProperty && <PropertyDetails property={selectedProperty} onClose={() => setSelectedProperty(null)} onSavedChange={refreshStudentDashboard} onBookingChange={refreshStudentDashboard} />}
     </div>
   );
 }

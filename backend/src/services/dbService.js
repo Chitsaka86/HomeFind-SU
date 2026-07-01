@@ -78,65 +78,103 @@ export async function getUserById(userId) {
     return result.rows[0];
 }
 
+
+
 export async function getProperties() {
     try {
-    const result = await pool.query(`
-        SELECT 
-            p.property_id as id,
-            p.title,
-            p.description,
-            p.location,
-            p.latitude,
-            p.longitude,
-            p.price,
-            p.property_type as type,
-            p.amenities,
-            p.house_rules as rules,
-            p.status,
-            p.created_at,
-            l.full_name as landlord_name,
-            l.phone as landlord_phone,
-            l.is_verified as landlord_verified,
-            COALESCE(AVG(r.overall_rating), 0) as avg_rating,
-            COUNT(DISTINCT r.review_id) as reviews_count
-        FROM properties p
-        JOIN landlords l ON p.landlord_id = l.landlord_id
-        LEFT JOIN reviews r ON p.property_id = r.property_id
-        GROUP BY p.property_id, l.landlord_id, l.full_name, l.phone, l.is_verified
-        ORDER BY p.created_at DESC
-    `);
-    if (result.rows.length === 0) {
-            console.log('No properties found in database');
+        console.log('📊 Fetching properties from database...');
+        
+        
+        const result = await pool.query(`
+            SELECT 
+                p.property_id as id,
+                p.title,
+                p.description,
+                p.location,
+                p.latitude,
+                p.longitude,
+                p.price,
+                p.property_type as type,
+                p.amenities,
+                p.house_rules as rules,
+                p.status,
+                p.created_at,
+                l.full_name as landlord_name,
+                l.phone as landlord_phone,
+                l.is_verified as landlord_verified,
+                COALESCE(AVG(r.overall_rating), 0) as rating,
+                COUNT(DISTINCT r.review_id) as reviews,
+                --  GET IMAGES from property_images table
+                json_agg(DISTINCT jsonb_build_object(
+                    'url', pi.url,
+                    'caption', pi.caption,
+                    'sort_order', pi.sort_order
+                )) FILTER (WHERE pi.url IS NOT NULL) as images
+            FROM properties p
+            JOIN landlords l ON p.landlord_id = l.landlord_id
+            LEFT JOIN reviews r ON p.property_id = r.property_id
+            LEFT JOIN property_images pi ON p.property_id = pi.property_id
+            GROUP BY p.property_id, l.landlord_id, l.full_name, l.phone, l.is_verified
+            ORDER BY p.created_at DESC
+        `);
+        
+        console.log(` Found ${result.rows.length} properties`);
+        
+        if (result.rows.length === 0) {
+            console.log(' No properties found in database');
             return [];
-    }
+        }
+        
     
-    return result.rows.map(row => ({
-        id: row.property_id,
-        title: row.title,
-        description: row.description,
-        location: row.location,
-        latitude: parseFloat(row.latitude),
-        longitude: parseFloat(row.longitude),
-        price: parseFloat(row.price),
-        type: row.property_type,
-        status: row.status,
-        amenities: row.amenities || [],
-        rules: row.house_rules,
-        rating: parseFloat(row.avg_rating) || 0,
-        reviews: parseInt(row.reviews_count) || 0,
-        distance: 1.2, 
-        landlord: {
-            name: row.landlord_name || 'Unknown',
-            phone: row.landlord_phone,
-            verified: row.landlord_verified || false
-        },
-        images: [],
-        reviewList: []
-    }));
+        const properties = result.rows.map(row => {
+            
+            let images = [];
+            if (row.images) {
+                try {
+                    
+                    images = (row.images || []).filter(img => img !== null && img.url !== null);
+                } catch (e) {
+                    console.error('Error parsing images:', e);
+                }
+            }
+            
+            return {
+                id: row.id,
+                title: row.title || 'Property',
+                description: row.description || '',
+                location: row.location || 'Unknown',
+                latitude: parseFloat(row.latitude) || 0,
+                longitude: parseFloat(row.longitude) || 0,
+                price: parseFloat(row.price) || 0,
+                type: row.type || 'Bedsitter',
+                status: row.status || 'available',
+                amenities: row.amenities || [],
+                rules: row.rules || 'No specific rules',
+                rating: parseFloat(row.rating) || 0,
+                reviews: parseInt(row.reviews) || 0,
+                distance: 1.2,
+                landlord: {
+                    name: row.landlord_name || 'Unknown',
+                    phone: row.landlord_phone,
+                    verified: row.landlord_verified || false
+                },
+                images: images, 
+                reviewList: []
+            };
+        });
+        
+        console.log(`✅ Properties fetched successfully: ${properties.length}`);
+  
+        const withImages = properties.filter(p => p.images && p.images.length > 0);
+        console.log(`📸 ${withImages.length} properties have images`);
+        
+        return properties;
+        
     } catch (error) {
-        console.error(' Error fetching properties:', error);
-        return []; 
-}
+        console.error('❌ Error fetching properties:', error);
+        console.error('❌ Error details:', error.message);
+        return [];
+    }
 }
 
 export async function getPropertyById(propertyId) {
@@ -227,10 +265,8 @@ export async function getStudentDashboard(email) {
 
 
 export async function getLandlordDashboard(email) {
-    
     const user = await getUserByEmail(email);
     if (!user) return null;
-    
     
     const landlordResult = await pool.query(
         `SELECT * FROM landlords WHERE user_id = $1`,
@@ -252,7 +288,6 @@ export async function getLandlordDashboard(email) {
         ORDER BY p.created_at DESC
     `, [landlord.landlord_id]);
     
-    
     const bookingsResult = await pool.query(`
         SELECT 
             b.*,
@@ -273,16 +308,17 @@ export async function getLandlordDashboard(email) {
         location: row.location,
         price: parseFloat(row.price),
         type: row.property_type,
-        status: row.status,
+        status: row.status, 
         amenities: row.amenities || [],
         rules: row.house_rules,
         rating: parseFloat(row.avg_rating) || 0,
         reviews: parseInt(row.reviews_count) || 0
     }));
     
+    
     const stats = {
         totalProperties: properties.length,
-        pendingApprovals: properties.filter(p => p.status === 'pending' || p.status === 'approved').length,
+        pendingApprovals: properties.filter(p => p.status === 'pending').length,
         confirmedBookings: bookingsResult.rows.filter(b => b.status === 'confirmed').length
     };
     
@@ -308,7 +344,6 @@ export async function getLandlordDashboard(email) {
         }))
     };
 }
-
 
 export async function createBooking(studentEmail, propertyId, bookingDate, bookingTime, type, message) {
     
