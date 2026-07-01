@@ -1,7 +1,6 @@
-
 export async function fetchProperties() {
   try {
-    console.log(' Fetching properties from API...');
+    console.log('Fetching properties from API...');
     const response = await fetch("/api/properties");
     console.log(' Response status:', response.status);
     
@@ -18,14 +17,25 @@ export async function fetchProperties() {
       ? await response.json()
       : { message: await response.text() };
     
-    console.log(' Data received:', data);
+    console.log('Full response data:', data);
     
     const properties = Array.isArray(data?.properties) ? data.properties : [];
-    console.log(` ${properties.length} properties loaded`);
+    console.log(`${properties.length} properties loaded`);
+    
+    
+    properties.forEach((prop, index) => {
+      console.log(` Property ${index + 1}: ${prop.title}`);
+      console.log(`   Has images array: ${Array.isArray(prop.images)}`);
+      console.log(`   Image count: ${prop.images?.length || 0}`);
+      if (prop.images && prop.images.length > 0) {
+        console.log(`   First image URL: ${prop.images[0].url?.substring(0, 50)}...`);
+        console.log(`   Image type: ${prop.images[0].url?.startsWith('data:') ? 'base64' : 'url'}`);
+      }
+    });
     
     return properties;
   } catch (error) {
-    console.error(' Error fetching properties:', error);
+    console.error('Error fetching properties:', error);
     throw error;
   }
 }

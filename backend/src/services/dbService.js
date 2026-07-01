@@ -79,11 +79,9 @@ export async function getUserById(userId) {
 }
 
 
-
 export async function getProperties() {
     try {
-        console.log('📊 Fetching properties from database...');
-        
+        console.log(' Fetching properties from database...');
         
         const result = await pool.query(`
             SELECT 
@@ -104,12 +102,15 @@ export async function getProperties() {
                 l.is_verified as landlord_verified,
                 COALESCE(AVG(r.overall_rating), 0) as rating,
                 COUNT(DISTINCT r.review_id) as reviews,
-                --  GET IMAGES from property_images table
-                json_agg(DISTINCT jsonb_build_object(
-                    'url', pi.url,
-                    'caption', pi.caption,
-                    'sort_order', pi.sort_order
-                )) FILTER (WHERE pi.url IS NOT NULL) as images
+                -- Get images from property_images table
+                COALESCE(
+                    json_agg(DISTINCT jsonb_build_object(
+                        'url', pi.url,
+                        'caption', pi.caption,
+                        'sort_order', pi.sort_order
+                    )) FILTER (WHERE pi.url IS NOT NULL AND pi.url != ''),
+                    '[]'::json
+                ) as images
             FROM properties p
             JOIN landlords l ON p.landlord_id = l.landlord_id
             LEFT JOIN reviews r ON p.property_id = r.property_id
@@ -118,24 +119,45 @@ export async function getProperties() {
             ORDER BY p.created_at DESC
         `);
         
-        console.log(` Found ${result.rows.length} properties`);
+        console.log(`Found ${result.rows.length} properties`);
         
         if (result.rows.length === 0) {
             console.log(' No properties found in database');
             return [];
         }
         
-    
         const properties = result.rows.map(row => {
-            
+          
             let images = [];
             if (row.images) {
                 try {
                     
-                    images = (row.images || []).filter(img => img !== null && img.url !== null);
+                    if (typeof row.images === 'string') {
+                        images = JSON.parse(row.images);
+                    } else if (Array.isArray(row.images)) {
+                        images = row.images;
+                    }
+                    
+                    
+                    images = images
+                        .filter(img => img !== null && img !== undefined && img.url)
+                        .map(img => ({
+                            url: img.url || '',
+                            caption: img.caption || '',
+                            sortOrder: img.sort_order || 0
+                        }));
                 } catch (e) {
-                    console.error('Error parsing images:', e);
+                    console.error(' Error parsing images for property', row.id, ':', e);
+                    images = [];
                 }
+            }
+            
+            // Log image info
+            if (images.length > 0) {
+                console.log(`${row.title} has ${images.length} image(s)`);
+                console.log(`   First image URL: ${images[0].url.substring(0, 50)}...`);
+            } else {
+                console.log(`${row.title} has NO images`);
             }
             
             return {
@@ -158,21 +180,16 @@ export async function getProperties() {
                     phone: row.landlord_phone,
                     verified: row.landlord_verified || false
                 },
-                images: images, 
+                images: images,
                 reviewList: []
             };
         });
         
-        console.log(`✅ Properties fetched successfully: ${properties.length}`);
-  
-        const withImages = properties.filter(p => p.images && p.images.length > 0);
-        console.log(`📸 ${withImages.length} properties have images`);
-        
+        console.log(`${properties.length} properties loaded successfully`);
         return properties;
         
     } catch (error) {
-        console.error('❌ Error fetching properties:', error);
-        console.error('❌ Error details:', error.message);
+        console.error('Error fetching properties:', error);
         return [];
     }
 }

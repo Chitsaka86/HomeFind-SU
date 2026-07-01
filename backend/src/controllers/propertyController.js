@@ -28,125 +28,149 @@ function normalizeStatus(status) {
 
 export const getProperties = async (_req, res) => {
 	try {
-		const query = `
-			WITH landlord_counts AS (
-				SELECT landlord_id, COUNT(*)::int AS listings
-				FROM properties
-				GROUP BY landlord_id
-			),
-			base AS (
-				SELECT
-					p.property_id,
-					p.title,
-					p.location,
-					p.price,
-					p.property_type,
-					COALESCE(p.amenities, ARRAY[]::text[]) AS amenities,
-					COALESCE(p.house_rules, '') AS house_rules,
-					p.status::text AS status,
-					p.latitude,
-					p.longitude,
-					COALESCE(l.full_name, d.landlord_name, 'Unknown landlord') AS landlord_name,
-					COALESCE(lc.listings, 0) AS landlord_listings,
-					COALESCE(r.avg_rating, 0) AS avg_rating,
-					COALESCE(r.review_count, 0) AS review_count,
-					COALESCE(img.images, '[]'::json) AS images,
-					p.created_at,
-					CASE
-						WHEN p.latitude IS NOT NULL AND p.longitude IS NOT NULL THEN
-							ROUND(
-								(
-									6371 * ACOS(
-										LEAST(
-											1,
-											GREATEST(
-												-1,
-												COS(RADIANS($1::numeric)) * COS(RADIANS(p.latitude::numeric)) * COS(RADIANS(p.longitude::numeric) - RADIANS($2::numeric))
-												+ SIN(RADIANS($1::numeric)) * SIN(RADIANS(p.latitude::numeric))
-											)
-										)
-									)
-								)::numeric,
-								1
-							)
-						ELSE NULL
-					END AS distance_km
-				FROM properties p
-				LEFT JOIN landlords l ON l.landlord_id = p.landlord_id
-				LEFT JOIN property_details d ON d.property_id = p.property_id
-				LEFT JOIN property_ratings r ON r.property_id = p.property_id
-				LEFT JOIN landlord_counts lc ON lc.landlord_id = p.landlord_id
-				LEFT JOIN LATERAL (
-					SELECT json_agg(
-						json_build_object(
-							'url', pi.url,
-							'caption', pi.caption,
-							'sortOrder', pi.sort_order
-						)
-						ORDER BY pi.sort_order NULLS LAST, pi.uploaded_at ASC
-					) AS images
-					FROM property_images pi
-					WHERE pi.property_id = p.property_id
-				) img ON true
-			)
-			SELECT
-				b.*,
-				COALESCE(rv.review_list, '[]'::json) AS review_list
-			FROM base b
-			LEFT JOIN LATERAL (
-				SELECT json_agg(
-					json_build_object(
-						'name', COALESCE(s.full_name, 'Anonymous'),
-						'date', to_char(rv.created_at, 'FMMonth YYYY'),
-						'rating', COALESCE(rv.overall_rating, 0),
-						'comment', COALESCE(rv.comment, '')
-					) ORDER BY rv.created_at DESC
-				) AS review_list
-				FROM reviews rv
-				LEFT JOIN students s ON s.student_id = rv.student_id
-				WHERE rv.property_id = b.property_id
-			) rv ON true
-			ORDER BY b.created_at DESC NULLS LAST, b.title ASC
+		console.log('🔍 Fetching properties with images...');
+		
+		
+		const propertiesQuery = `
+			SELECT 
+				p.property_id,
+				p.title,
+				p.location,
+				p.price,
+				p.property_type,
+				p.amenities,
+				p.house_rules,
+				p.status,
+				p.latitude,
+				p.longitude,
+				p.created_at,
+				l.full_name as landlord_name,
+				COALESCE(
+					(SELECT COUNT(*) FROM properties WHERE landlord_id = p.landlord_id),
+					0
+				) as landlord_listings
+			FROM properties p
+			LEFT JOIN landlords l ON l.landlord_id = p.landlord_id
+			ORDER BY p.created_at DESC NULLS LAST, p.title ASC
 		`;
 
-		const result = await pool.query(query, [STRATHMORE_LATITUDE, STRATHMORE_LONGITUDE]);
+		const propertiesResult = await pool.query(propertiesQuery);
+		
+		console.log(`Found ${propertiesResult.rows.length} properties`);
 
-		const properties = result.rows.map((row) => ({
-			id: row.property_id,
-			title: row.title,
-			location: row.location,
-			latitude: row.latitude == null ? null : Number(row.latitude),
-			longitude: row.longitude == null ? null : Number(row.longitude),
-			distance: toNumber(row.distance_km, 0),
-			price: toNumber(row.price, 0),
-			status: normalizeStatus(row.status),
-			rating: toNumber(row.avg_rating, 0),
-			reviews: toNumber(row.review_count, 0),
-			amenities: Array.isArray(row.amenities) ? row.amenities : [],
-			rules: row.house_rules || "",
-			landlord: {
-				name: row.landlord_name || "Unknown landlord",
-				listings: toNumber(row.landlord_listings, 0),
-			},
-			reviewList: Array.isArray(row.review_list) ? row.review_list : [],
-			imageUrl: row.image_url || "",
-			propertyType: row.property_type || "",
-			images: Array.isArray(row.images)
-				? row.images
-					.filter((image) => image && typeof image === 'object' && image.url)
-					.map((image) => ({
-						url: image.url,
-						caption: image.caption || '',
-						sortOrder: image.sortOrder ?? image.sort_order ?? 0,
-					}))
-				: [],
-		}));
+		
+		const properties = [];
+		
+		for (const row of propertiesResult.rows) {
+			
+			const imagesQuery = `
+				SELECT 
+					url,
+					caption,
+					sort_order
+				FROM property_images
+				WHERE property_id = $1
+				ORDER BY sort_order NULLS LAST, uploaded_at ASC
+			`;
+			
+			const imagesResult = await pool.query(imagesQuery, [row.property_id]);
+			
+			
+			const reviewsQuery = `
+				SELECT 
+					s.full_name as name,
+					to_char(rv.created_at, 'FMMonth YYYY') as date,
+					COALESCE(rv.overall_rating, 0) as rating,
+					COALESCE(rv.comment, '') as comment
+				FROM reviews rv
+				LEFT JOIN students s ON s.student_id = rv.student_id
+				WHERE rv.property_id = $1
+				ORDER BY rv.created_at DESC
+				LIMIT 10
+			`;
+			
+			let reviews = [];
+			try {
+				const reviewsResult = await pool.query(reviewsQuery, [row.property_id]);
+				reviews = reviewsResult.rows;
+			} catch (reviewError) {
+				console.log('Reviews table might not exist yet:', reviewError.message);
+				reviews = [];
+			}
+			
+			
+			let avgRating = 0;
+			let reviewCount = 0;
+			try {
+				const ratingQuery = `
+					SELECT 
+						COALESCE(AVG(overall_rating), 0) as avg_rating,
+						COUNT(*) as review_count
+					FROM reviews
+					WHERE property_id = $1
+				`;
+				const ratingResult = await pool.query(ratingQuery, [row.property_id]);
+				avgRating = parseFloat(ratingResult.rows[0]?.avg_rating) || 0;
+				reviewCount = parseInt(ratingResult.rows[0]?.review_count) || 0;
+			} catch (ratingError) {
+				console.log('Rating calculation error:', ratingError.message);
+			}
+			
+			
+			let distance = 0;
+			if (row.latitude && row.longitude) {
+				
+				const latDiff = row.latitude - STRATHMORE_LATITUDE;
+				const lngDiff = row.longitude - STRATHMORE_LONGITUDE;
+				distance = Math.round(Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 111);
+			}
+			
+			
+			let images = [];
+			if (imagesResult.rows.length > 0) {
+				images = imagesResult.rows.map(img => ({
+					url: img.url,
+					caption: img.caption || '',
+					sortOrder: img.sort_order || 0
+				}));
+			}
+			
+			console.log(`📸 Property ${row.title}: ${images.length} images`);
+			
+			properties.push({
+				id: row.property_id,
+				title: row.title || 'Property',
+				location: row.location || 'Unknown',
+				latitude: row.latitude == null ? null : Number(row.latitude),
+				longitude: row.longitude == null ? null : Number(row.longitude),
+				distance: distance,
+				price: toNumber(row.price, 0),
+				status: normalizeStatus(row.status),
+				rating: avgRating,
+				reviews: reviewCount,
+				amenities: Array.isArray(row.amenities) ? row.amenities : [],
+				rules: row.house_rules || "",
+				landlord: {
+					name: row.landlord_name || "Unknown landlord",
+					listings: toNumber(row.landlord_listings, 0),
+				},
+				reviewList: reviews,
+				propertyType: row.property_type || "",
+				images: images,
+			});
+		}
 
+		console.log(`Returning ${properties.length} properties`);
 		return res.status(200).json({
 			properties,
 		});
+		
 	} catch (error) {
-		console.error(error);
-		return res.status(500).json({ message: "Unable to load properties right now." });
+		console.error('Error in getProperties:', error);
+		console.error('Error stack:', error.stack);
+		return res.status(500).json({ 
+			message: "Unable to load properties right now.",
+			error: error.message 
+		});
 	}
 };

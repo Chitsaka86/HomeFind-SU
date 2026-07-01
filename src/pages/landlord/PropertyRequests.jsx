@@ -8,9 +8,12 @@ import {
   XCircleIcon,
   UserIcon,
 } from "@heroicons/react/24/outline";
+import { updateBookingStatus } from "../../services/bookingService";
 
 export default function PropertyRequests({ bookings = [], onUpdate }) {
   const [tab, setTab] = useState("all");
+  const [updatingId, setUpdatingId] = useState(null);
+  const [updateError, setUpdateError] = useState("");
 
   const filteredBookings = useMemo(() => {
     if (!bookings || !Array.isArray(bookings)) {
@@ -27,6 +30,36 @@ export default function PropertyRequests({ bookings = [], onUpdate }) {
       return ["confirmed", "declined", "completed"].includes(booking.status);
     });
   }, [bookings, tab]);
+
+  
+  const handleStatusChange = async (bookingId, newStatus) => {
+    try {
+      setUpdatingId(bookingId);
+      setUpdateError("");
+      
+      console.log(`Updating booking ${bookingId} to ${newStatus}`);
+      
+     
+      const result = await updateBookingStatus(bookingId, newStatus);
+      
+      console.log('Booking updated:', result);
+      
+      
+      if (onUpdate) {
+        onUpdate(bookingId, newStatus);
+      }
+      
+    } catch (error) {
+      console.error(' Error updating booking:', error);
+      setUpdateError(error.message || 'Failed to update booking status');
+      
+      if (onUpdate) {
+        
+      }
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const statusConfig = {
     pending: { 
@@ -192,6 +225,24 @@ export default function PropertyRequests({ bookings = [], onUpdate }) {
         </div>
       </div>
 
+      {/* Error Message */}
+      {updateError && (
+        <div style={{
+          margin: "0 0 16px",
+          padding: "10px 14px",
+          background: C.dangerTint,
+          border: `1px solid ${C.danger}`,
+          borderRadius: 6,
+          color: C.danger,
+          fontSize: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}>
+           {updateError}
+        </div>
+      )}
+
       {/* Content */}
       <div style={{ 
         background: C.surface, 
@@ -209,6 +260,7 @@ export default function PropertyRequests({ bookings = [], onUpdate }) {
               const status = statusConfig[booking.status] || statusConfig.pending;
               const isPending = booking.status === "pending";
               const isConfirmed = booking.status === "confirmed";
+              const isUpdating = updatingId === booking.id;
               
               return (
                 <div 
@@ -220,6 +272,7 @@ export default function PropertyRequests({ bookings = [], onUpdate }) {
                     background: isPending ? `${C.warnTint}80` : "#FAFAF8",
                     transition: "all 0.2s ease",
                     boxShadow: isPending ? "0 2px 8px rgba(186, 117, 23, 0.06)" : "none",
+                    opacity: isUpdating ? 0.7 : 1,
                   }}
                 >
                   {/* Header Row */}
@@ -315,16 +368,17 @@ export default function PropertyRequests({ bookings = [], onUpdate }) {
                     }}>
                       <button
                         type="button"
-                        onClick={() => onUpdate?.(booking.id, "confirmed")}
+                        onClick={() => handleStatusChange(booking.id, "confirmed")}
+                        disabled={isUpdating}
                         style={{
                           flex: 1,
                           minWidth: 100,
                           border: "none",
                           borderRadius: 8,
                           padding: "10px 20px",
-                          background: C.green,
+                          background: isUpdating ? "#ccc" : C.green,
                           color: "#fff",
-                          cursor: "pointer",
+                          cursor: isUpdating ? "not-allowed" : "pointer",
                           fontWeight: 600,
                           fontSize: 13,
                           transition: "all 0.2s ease",
@@ -334,29 +388,43 @@ export default function PropertyRequests({ bookings = [], onUpdate }) {
                           gap: 6,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-1px)";
-                          e.currentTarget.style.boxShadow = "0 4px 12px rgba(59, 109, 17, 0.3)";
+                          if (!isUpdating) {
+                            e.currentTarget.style.transform = "translateY(-1px)";
+                            e.currentTarget.style.boxShadow = "0 4px 12px rgba(59, 109, 17, 0.3)";
+                          }
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = "translateY(0)";
                           e.currentTarget.style.boxShadow = "none";
                         }}
                       >
-                        <CheckCircleIcon style={{ width: 16, height: 16 }} />
-                        Confirm
+                        {isUpdating ? (
+                          <div style={{
+                            width: 16,
+                            height: 16,
+                            border: `2px solid #fff`,
+                            borderTop: `2px solid transparent`,
+                            borderRadius: "50%",
+                            animation: "spin 1s linear infinite",
+                          }} />
+                        ) : (
+                          <CheckCircleIcon style={{ width: 16, height: 16 }} />
+                        )}
+                        {isUpdating ? "Updating..." : "Confirm"}
                       </button>
                       <button
                         type="button"
-                        onClick={() => onUpdate?.(booking.id, "declined")}
+                        onClick={() => handleStatusChange(booking.id, "declined")}
+                        disabled={isUpdating}
                         style={{
                           flex: 1,
                           minWidth: 100,
-                          border: `1px solid ${C.danger}`,
+                          border: `1px solid ${isUpdating ? "#ccc" : C.danger}`,
                           borderRadius: 8,
                           padding: "10px 20px",
                           background: "#fff",
-                          color: C.danger,
-                          cursor: "pointer",
+                          color: isUpdating ? "#ccc" : C.danger,
+                          cursor: isUpdating ? "not-allowed" : "pointer",
                           fontWeight: 600,
                           fontSize: 13,
                           transition: "all 0.2s ease",
@@ -366,31 +434,33 @@ export default function PropertyRequests({ bookings = [], onUpdate }) {
                           gap: 6,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = C.dangerTint;
-                          e.currentTarget.style.transform = "translateY(-1px)";
+                          if (!isUpdating) {
+                            e.currentTarget.style.background = C.dangerTint;
+                            e.currentTarget.style.transform = "translateY(-1px)";
+                          }
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.background = "#fff";
                           e.currentTarget.style.transform = "translateY(0)";
                         }}
                       >
-                        <XCircleIcon style={{ width: 16, height: 16 }} />
-                        Decline
+                        {isUpdating ? "Updating..." : <><XCircleIcon style={{ width: 16, height: 16 }} /> Decline</>}
                       </button>
                     </div>
                   ) : isConfirmed ? (
                     <div style={{ marginLeft: 60 }}>
                       <button
                         type="button"
-                        onClick={() => onUpdate?.(booking.id, "completed")}
+                        onClick={() => handleStatusChange(booking.id, "completed")}
+                        disabled={isUpdating}
                         style={{
                           width: "100%",
-                          border: `1px solid ${C.border}`,
+                          border: `1px solid ${isUpdating ? "#ccc" : C.border}`,
                           borderRadius: 8,
                           padding: "10px 20px",
                           background: "#fff",
-                          color: C.text,
-                          cursor: "pointer",
+                          color: isUpdating ? "#ccc" : C.text,
+                          cursor: isUpdating ? "not-allowed" : "pointer",
                           fontWeight: 500,
                           fontSize: 13,
                           transition: "all 0.2s ease",
@@ -400,9 +470,11 @@ export default function PropertyRequests({ bookings = [], onUpdate }) {
                           gap: 6,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = C.blueTint;
-                          e.currentTarget.style.borderColor = C.blue;
-                          e.currentTarget.style.transform = "translateY(-1px)";
+                          if (!isUpdating) {
+                            e.currentTarget.style.background = C.blueTint;
+                            e.currentTarget.style.borderColor = C.blue;
+                            e.currentTarget.style.transform = "translateY(-1px)";
+                          }
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.background = "#fff";
@@ -410,8 +482,7 @@ export default function PropertyRequests({ bookings = [], onUpdate }) {
                           e.currentTarget.style.transform = "translateY(0)";
                         }}
                       >
-                        <CheckCircleIcon style={{ width: 16, height: 16 }} />
-                        Mark as completed
+                        {isUpdating ? "Updating..." : <><CheckCircleIcon style={{ width: 16, height: 16 }} /> Mark as completed</>}
                       </button>
                     </div>
                   ) : null}

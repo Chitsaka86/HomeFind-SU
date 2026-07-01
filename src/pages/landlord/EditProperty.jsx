@@ -20,6 +20,7 @@ export default function EditProperty({ property, onSave, onClose, onDelete }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (property) {
@@ -70,6 +71,33 @@ export default function EditProperty({ property, onSave, onClose, onDelete }) {
     }
   };
 
+ 
+  const handleDelete = async () => {
+    
+    if (!window.confirm('Are you sure you want to delete this property? This action cannot be undone.')) {
+      return;
+    }
+    
+    setIsDeleting(true);
+    setError("");
+    
+    try {
+      console.log(`Deleting property ${form.id} from EditProperty...`);
+      
+      
+      if (onDelete) {
+        await onDelete(form.id);
+      }
+      
+      
+      
+    } catch (err) {
+      console.error(' Error in delete:', err);
+      setError(err.message || "Failed to delete property");
+      setIsDeleting(false);
+    }
+  };
+
   const handleRemoveImage = (imageId) => {
     setForm(current => ({
       ...current,
@@ -117,7 +145,6 @@ export default function EditProperty({ property, onSave, onClose, onDelete }) {
             alignItems: "center",
             gap: 8,
           }}>
-            
             Property updated successfully!
           </div>
         )}
@@ -136,8 +163,7 @@ export default function EditProperty({ property, onSave, onClose, onDelete }) {
             alignItems: "center",
             gap: 8,
           }}>
-            
-            {error}
+             {error}
           </div>
         )}
 
@@ -187,61 +213,89 @@ export default function EditProperty({ property, onSave, onClose, onDelete }) {
                 gap: 8,
                 marginBottom: 8,
               }}>
-                {form.images.map((image) => (
-                  <div key={image.id} style={{
-                    position: "relative",
-                    borderRadius: 6,
-                    overflow: "hidden",
-                    aspectRatio: "1",
-                    background: C.bg,
-                    border: image.isPrimary ? `2px solid ${C.blue}` : `1px solid ${C.border}`,
-                  }}>
-                    <img
-                      src={image.url}
-                      alt={image.caption || "Property image"}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                      }}
-                    />
-                    {image.isPrimary && (
-                      <div style={{
-                        position: "absolute",
-                        top: 2,
-                        left: 2,
-                        background: C.blue,
-                        color: "#fff",
-                        fontSize: 7,
-                        fontWeight: 600,
-                        padding: "1px 6px",
-                        borderRadius: 3,
-                      }}>
-                        Primary
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveImage(image.id)}
-                      style={{
-                        position: "absolute",
-                        top: 2,
-                        right: 2,
-                        background: "rgba(0,0,0,0.6)",
-                        border: "none",
-                        borderRadius: 3,
-                        color: "#fff",
-                        cursor: "pointer",
-                        padding: "2px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <TrashIcon style={{ width: 12, height: 12 }} />
-                    </button>
-                  </div>
-                ))}
+                {form.images.map((image) => {
+                  const imageUrl = image.url || image.image_data || '';
+                  const isValidImage = imageUrl && (
+                    imageUrl.startsWith('data:image/') || 
+                    imageUrl.startsWith('http://') || 
+                    imageUrl.startsWith('https://')
+                  );
+                  
+                  return (
+                    <div key={image.id || Math.random()} style={{
+                      position: "relative",
+                      borderRadius: 6,
+                      overflow: "hidden",
+                      aspectRatio: "1",
+                      background: C.bg,
+                      border: image.isPrimary ? `2px solid ${C.blue}` : `1px solid ${C.border}`,
+                    }}>
+                      {isValidImage ? (
+                        <img
+                          src={imageUrl}
+                          alt={image.caption || "Property image"}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                          onError={(e) => {
+                            console.error('Image failed to load in Edit:', imageUrl);
+                            e.target.style.display = 'none';
+                            e.target.parentElement.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:${C.textSec};font-size:10px;">No image</div>`;
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '100%',
+                          height: '100%',
+                          color: C.textSec,
+                          fontSize: 10,
+                        }}>
+                          No image
+                        </div>
+                      )}
+                      {image.isPrimary && (
+                        <div style={{
+                          position: "absolute",
+                          top: 2,
+                          left: 2,
+                          background: C.blue,
+                          color: "#fff",
+                          fontSize: 7,
+                          fontWeight: 600,
+                          padding: "1px 6px",
+                          borderRadius: 3,
+                        }}>
+                          Primary
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(image.id)}
+                        style={{
+                          position: "absolute",
+                          top: 2,
+                          right: 2,
+                          background: "rgba(0,0,0,0.6)",
+                          border: "none",
+                          borderRadius: 3,
+                          color: "#fff",
+                          cursor: "pointer",
+                          padding: "2px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <TrashIcon style={{ width: 12, height: 12 }} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div style={{
@@ -293,8 +347,6 @@ export default function EditProperty({ property, onSave, onClose, onDelete }) {
               </select>
             </div>
           </div>
-
-          {/*  REMOVED: Status/Availability dropdown - Landlord cannot change this */}
 
           {/* Description */}
           <div>
@@ -380,22 +432,24 @@ export default function EditProperty({ property, onSave, onClose, onDelete }) {
           }}>
             <button
               type="button"
-              onClick={() => onDelete?.(form.id)}
+              onClick={handleDelete}
               style={dangerButtonStyle}
+              disabled={isDeleting || loading}
             >
-              Delete listing
+              {isDeleting ? "Deleting..." : "Delete listing"}
             </button>
             <button
               type="button"
               onClick={onClose}
               style={secondaryButtonStyle}
+              disabled={isDeleting}
             >
               Cancel
             </button>
             <button
               type="submit"
               style={primaryButtonStyle}
-              disabled={loading}
+              disabled={loading || isDeleting}
             >
               {loading ? "Saving..." : "Save changes"}
             </button>

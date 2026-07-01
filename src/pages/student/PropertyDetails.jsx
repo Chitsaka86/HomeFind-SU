@@ -39,7 +39,7 @@ export default function PropertyDetails({ property, onClose, onSavedChange, onBo
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  // Check if property is saved
+  
   useEffect(() => {
     const checkSaved = async () => {
       try {
@@ -137,6 +137,14 @@ export default function PropertyDetails({ property, onClose, onSavedChange, onBo
     return null;
   }
 
+  
+  const firstImage = propertyImages.length > 0 ? propertyImages[0].url : null;
+  const isValidImage = firstImage && (
+    firstImage.startsWith('data:image/') || 
+    firstImage.startsWith('http://') || 
+    firstImage.startsWith('https://')
+  );
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div className="hide-scrollbar" style={{ background: C.surface, borderRadius: 14, width: "100%", maxWidth: 860, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
@@ -155,17 +163,39 @@ export default function PropertyDetails({ property, onClose, onSavedChange, onBo
         <div style={{ display: "flex", gap: 0 }}>
           <div className="hide-scrollbar" style={{ flex: 3, padding: 20, borderRight: `1px solid ${C.border}`, overflowY: "auto" }}>
             {/* Image Gallery */}
-            <div style={{ height: 240, borderRadius: 10, overflow: "hidden", background: "linear-gradient(135deg,#E6F1FB,#C8DFF5)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, position: "relative" }}>
-              {propertyImages[activeImageIndex]?.url ? (
+            <div style={{ 
+              height: 240, 
+              borderRadius: 10, 
+              overflow: "hidden", 
+              background: isValidImage ? 'transparent' : "linear-gradient(135deg,#E6F1FB,#C8DFF5)",
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center", 
+              marginBottom: 10, 
+              position: "relative" 
+            }}>
+              {isValidImage ? (
                 <img
-                  src={propertyImages[activeImageIndex].url}
-                  alt={propertyImages[activeImageIndex].caption || property.title}
+                  src={firstImage}
+                  alt={property.title}
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  onError={(e) => {
+                    console.error('Image failed to load in PropertyDetails:', firstImage);
+                    e.target.style.display = 'none';
+                    
+                    const parent = e.target.parentElement;
+                    parent.style.background = "linear-gradient(135deg,#E6F1FB,#C8DFF5)";
+                    parent.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
+                      <svg style="width:60px;height:60px;color:#185FA5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                      </svg></div>`;
+                  }}
                 />
               ) : (
                 <HomeModernIcon style={{ width: 60, height: 60, color: C.blue }} />
               )}
-              {/* ✅ Save Button on Image */}
+              
+              {/* Save Button on Image */}
               <button
                 onClick={handleToggleSave}
                 disabled={saving}
@@ -200,32 +230,62 @@ export default function PropertyDetails({ property, onClose, onSavedChange, onBo
               </button>
             </div>
             
-            {thumbnailImages.length > 0 ? (
+            {/* Thumbnails */}
+            {thumbnailImages.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))", gap: 6, marginBottom: 16 }}>
-                {thumbnailImages.map((image, index) => (
-                  <button
-                    key={`${image.url}-${index}`}
-                    type="button"
-                    onClick={() => setActiveImageIndex(index)}
-                    style={{
-                      height: 54,
-                      borderRadius: 6,
-                      overflow: "hidden",
-                      border: index === activeImageIndex ? `2px solid ${C.blue}` : `1px solid ${C.border}`,
-                      background: index === activeImageIndex ? C.blueTint : "#F0F0E8",
-                      padding: 0,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <img
-                      src={image.url}
-                      alt={image.caption || `${property.title} ${index + 1}`}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  </button>
-                ))}
+                {thumbnailImages.map((image, index) => {
+                  const imageUrl = image.url;
+                  const isValidThumbnail = imageUrl && (
+                    imageUrl.startsWith('data:image/') || 
+                    imageUrl.startsWith('http://') || 
+                    imageUrl.startsWith('https://')
+                  );
+                  
+                  return (
+                    <button
+                      key={`${imageUrl}-${index}`}
+                      type="button"
+                      onClick={() => setActiveImageIndex(index)}
+                      style={{
+                        height: 54,
+                        borderRadius: 6,
+                        overflow: "hidden",
+                        border: index === activeImageIndex ? `2px solid ${C.blue}` : `1px solid ${C.border}`,
+                        background: index === activeImageIndex ? C.blueTint : "#F0F0E8",
+                        padding: 0,
+                        cursor: "pointer",
+                        position: 'relative',
+                      }}
+                    >
+                      {isValidThumbnail ? (
+                        <img
+                          src={imageUrl}
+                          alt={image.caption || `${property.title} ${index + 1}`}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          onError={(e) => {
+                            console.error('Thumbnail failed to load:', imageUrl);
+                            e.target.style.display = 'none';
+                            e.target.parentElement.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:10px;color:${C.textSec}">No image</div>`;
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '100%',
+                          height: '100%',
+                          fontSize: 10,
+                          color: C.textSec,
+                        }}>
+                          No image
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-            ) : null}
+            )}
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
               <div>
@@ -314,7 +374,6 @@ export default function PropertyDetails({ property, onClose, onSavedChange, onBo
               <>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>Book this property</p>
-                  {/* ✅ Save button in booking section */}
                   <button
                     onClick={handleToggleSave}
                     disabled={saving}

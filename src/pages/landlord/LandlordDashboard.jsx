@@ -21,7 +21,7 @@ import AddProperty from "./AddProperty";
 import EditProperty from "./EditProperty";
 import PropertyRequests from "./PropertyRequests";
 import { Badge, C } from "./landlordTheme";
-import { fetchLandlordDashboard } from "../../services/landlordDashboardService";
+import { deleteProperty, fetchLandlordDashboard } from "../../services/landlordDashboardService";
 
 function StatCard({ label, value, icon, tone = "text" }) {
   const colors = {
@@ -105,6 +105,7 @@ function LandlordDashboard() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [profileError, setProfileError] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   const reloadDashboard = async () => {
     try {
@@ -187,17 +188,41 @@ function LandlordDashboard() {
     setProperties(current => current.map(property => (property.id === form.id ? { ...property, ...form } : property)));
   };
 
-  const handleDelete = id => {
-    setProperties(current => current.filter(property => property.id !== id));
-    setEditingProperty(null);
-    setPage("listings");
+  
+  const handleDelete = async (id) => {
+    
+    if (!window.confirm('Are you sure you want to delete this property? This action cannot be undone.')) {
+      return;
+    }
+    
+    setDeletingId(id);
+    try {
+      console.log(`Deleting property ${id}...`);
+      
+      
+      await deleteProperty(id);
+      
+      
+      setProperties(current => current.filter(property => property.id !== id));
+      setEditingProperty(null);
+      setPage("listings");
+      
+      
+      alert('Property deleted successfully!');
+      
+    } catch (error) {
+      console.error('Error deleting property:', error);
+      alert(error.message || 'Failed to delete property. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const handleBookingUpdate = (id, status) => {
     setBookings(current => current.map(booking => (booking.id === id ? { ...booking, status } : booking)));
   };
 
-  // Edit profile handlers
+  
   const openEditProfile = () => {
     if (landlord) {
       setEditProfileData({
@@ -218,14 +243,13 @@ function LandlordDashboard() {
     setProfileSuccess(false);
 
     try {
-      // Update local state
+  
       setLandlord(prev => ({
         ...prev,
         fullName: editProfileData.fullName,
         phone: editProfileData.phone,
       }));
       
-      // Update localStorage
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       userData.name = editProfileData.fullName;
       localStorage.setItem('user', JSON.stringify(userData));
@@ -686,47 +710,74 @@ function LandlordDashboard() {
 
             {filteredProperties.length > 0 ? (
               <div style={{ display: "grid", gap: 8 }}>
-                {filteredProperties.map(property => (
-                  <div key={property.id} style={listingCardStyle}>
-                    <div style={listingTopRowStyle}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 6,
-                          background: C.blueTint,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: C.blue,
-                          flexShrink: 0,
-                        }}>
-                          <BuildingOffice2Icon style={{ width: 16, height: 16 }} />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 12 }}>{property.title}</div>
-                          <div style={{ color: C.textSec, fontSize: 10 }}>
-                            {property.location} · {property.type}
+                {filteredProperties.map(property => {
+                  const firstImage = property.images && property.images.length > 0 
+                    ? property.images[0].url 
+                    : null;
+                  
+                  const isValidImage = firstImage && (
+                    firstImage.startsWith('data:image/') || 
+                    firstImage.startsWith('http://') || 
+                    firstImage.startsWith('https://')
+                  );
+                  
+                  return (
+                    <div key={property.id} style={listingCardStyle}>
+                      <div style={listingTopRowStyle}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{
+                            width: 60,
+                            height: 60,
+                            borderRadius: 6,
+                            background: isValidImage 
+                              ? `url(${firstImage}) center/cover no-repeat` 
+                              : "linear-gradient(135deg, #E6F1FB 0%, #D0E8F8 100%)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            overflow: 'hidden',
+                          }}>
+                            {!isValidImage && <BuildingOffice2Icon style={{ width: 24, height: 24, color: C.blue }} />}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 12 }}>{property.title}</div>
+                            <div style={{ color: C.textSec, fontSize: 10 }}>
+                              {property.location} · {property.type}
+                            </div>
                           </div>
                         </div>
+                        <Badge variant={property.status === "pending" ? "pending" : property.status === "booked" ? "info" : "success"}>
+                          {property.status}
+                        </Badge>
                       </div>
-                      <Badge variant={property.status === "pending" ? "pending" : property.status === "booked" ? "info" : "success"}>
-                        {property.status}
-                      </Badge>
-                    </div>
 
-                    <div style={listingBottomRowStyle}>
-                      <div style={{ fontWeight: 600, fontSize: 14, color: C.text }}>
-                        KSh {Number(property.price).toLocaleString()}
-                        <span style={{ fontSize: 10, fontWeight: 400, color: C.textSec }}>/mo</span>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button type="button" onClick={() => setEditingProperty(property)} style={ghostButtonStyle}>Edit</button>
-                        <button type="button" onClick={() => handleDelete(property.id)} style={dangerGhostButtonStyle}>Delete</button>
+                      <div style={listingBottomRowStyle}>
+                        <div style={{ fontWeight: 600, fontSize: 14, color: C.text }}>
+                          KSh {Number(property.price).toLocaleString()}
+                          <span style={{ fontSize: 10, fontWeight: 400, color: C.textSec }}>/mo</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button 
+                            type="button" 
+                            onClick={() => setEditingProperty(property)} 
+                            style={ghostButtonStyle}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => handleDelete(property.id)} 
+                            style={dangerGhostButtonStyle}
+                            disabled={deletingId === property.id}
+                          >
+                            {deletingId === property.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <EmptyState 
@@ -864,7 +915,7 @@ function LandlordDashboard() {
         ) : null}
       </main>
 
-      {/*  Edit Profile Modal */}
+      {/* Edit Profile Modal */}
       {showEditProfile && (
         <div style={overlayStyle}>
           <div style={modalStyle}>
@@ -891,7 +942,6 @@ function LandlordDashboard() {
                 alignItems: "center",
                 gap: 8,
               }}>
-                
                 Profile updated successfully!
               </div>
             )}
@@ -909,7 +959,6 @@ function LandlordDashboard() {
                 alignItems: "center",
                 gap: 8,
               }}>
-                
                 {profileError}
               </div>
             )}
@@ -965,7 +1014,7 @@ function LandlordDashboard() {
                 </button>
                 <button
                   type="submit"
-                  style={primaryButtonStyle}  // ✅ This is now defined!
+                  style={primaryButtonStyle}
                   disabled={profileSaving}
                 >
                   {profileSaving ? "Saving..." : "Save Changes"}
@@ -989,7 +1038,6 @@ function LandlordDashboard() {
 }
 
 export default LandlordDashboard;
-
 
 const headerStyle = {
   background: C.surface,
@@ -1147,7 +1195,6 @@ const dangerGhostButtonStyle = {
   transition: "all 0.15s",
 };
 
-
 const overlayStyle = {
   position: "fixed",
   inset: 0,
@@ -1201,7 +1248,6 @@ const inputStyle = {
   outline: "none",
 };
 
-// ✅ The missing primaryButtonStyle is now defined here!
 const primaryButtonStyle = {
   padding: "8px 20px",
   border: "none",

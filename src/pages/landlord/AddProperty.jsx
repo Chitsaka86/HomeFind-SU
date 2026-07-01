@@ -309,64 +309,71 @@ export default function AddProperty({ onSave, onCancel }) {
     }
   };
 
-  const handleImageUpload = async (event) => {
-    const files = Array.from(event.target.files);
-    const newErrors = [];
-    const validFiles = [];
 
-    if (form.images.length + files.length > MAX_IMAGES) {
-      setImageErrors([`Maximum ${MAX_IMAGES} images allowed. You can add ${MAX_IMAGES - form.images.length} more.`]);
-      setTimeout(() => setImageErrors([]), 5000);
-      return;
+const handleImageUpload = async (event) => {
+  const files = Array.from(event.target.files);
+  const newErrors = [];
+  const validFiles = [];
+
+  if (form.images.length + files.length > MAX_IMAGES) {
+    setImageErrors([`Maximum ${MAX_IMAGES} images allowed. You can add ${MAX_IMAGES - form.images.length} more.`]);
+    setTimeout(() => setImageErrors([]), 5000);
+    return;
+  }
+
+  setUploadingImages(true);
+
+  for (const file of files) {
+    if (file.size > MAX_FILE_SIZE) {
+      newErrors.push(`${file.name} exceeds 5MB limit`);
+      continue;
     }
-
-    setUploadingImages(true);
-
-    for (const file of files) {
-      if (file.size > MAX_FILE_SIZE) {
-        newErrors.push(`${file.name} exceeds 5MB limit`);
-        continue;
-      }
+    
+    if (!file.type.startsWith('image/')) {
+      newErrors.push(`${file.name} is not an image file`);
+      continue;
+    }
+    
+    try {
       
-      if (!file.type.startsWith('image/')) {
-        newErrors.push(`${file.name} is not an image file`);
-        continue;
-      }
+      const compressedFile = await compressImage(file, 600, 600, 0.6);
       
-      try {
-        const compressedFile = await compressImage(file, 600, 600, 0.6);
-        
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const imageData = {
-            id: Date.now() + Math.random() * 1000,
-            url: e.target.result,
-            file: compressedFile,
-            caption: file.name.split('.')[0],
-            isPrimary: form.images.length === 0,
-          };
-          setForm(prev => ({
-            ...prev,
-            images: [...prev.images, imageData],
-          }));
-          setUploadingImages(false);
-        };
+      
+      const reader = new FileReader();
+      const dataUrl = await new Promise((resolve, reject) => {
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
         reader.readAsDataURL(compressedFile);
-      } catch (error) {
-        console.error('Error compressing image:', error);
-        newErrors.push(`Failed to process ${file.name}`);
-      }
+      });
+      
+      const imageData = {
+        id: Date.now() + Math.random() * 1000,
+        url: dataUrl, 
+        caption: file.name.split('.')[0],
+        isPrimary: form.images.length === 0,
+        file: compressedFile 
+      };
+      
+      setForm(prev => ({
+        ...prev,
+        images: [...prev.images, imageData],
+      }));
+    } catch (error) {
+      console.error('Error processing image:', error);
+      newErrors.push(`Failed to process ${file.name}`);
     }
+  }
 
-    if (newErrors.length > 0) {
-      setImageErrors(newErrors);
-      setTimeout(() => setImageErrors([]), 5000);
-    }
+  if (newErrors.length > 0) {
+    setImageErrors(newErrors);
+    setTimeout(() => setImageErrors([]), 5000);
+  }
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
+  setUploadingImages(false);
+  if (fileInputRef.current) {
+    fileInputRef.current.value = '';
+  }
+};
 
   const removeImage = (imageId) => {
     setForm(prev => ({
@@ -413,61 +420,113 @@ export default function AddProperty({ onSave, onCancel }) {
   };
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
-    
-    setErrors(prev => ({ ...prev, submit: '' }));
-    
-    if (!validateForm()) return;
+  event.preventDefault();
+  
+  setErrors(prev => ({ ...prev, submit: '' }));
+  
+  if (!validateForm()) return;
 
-    const userData = JSON.parse(localStorage.getItem('user') || '{}');
-    if (!userData.email) {
-      setErrors({ submit: 'Please log in again to add a property.' });
+  const userData = JSON.parse(localStorage.getItem('user') || '{}');
+  if (!userData.email) {
+    setErrors({ submit: 'Please log in again to add a property.' });
+    return;
+  }
+
+  try {
+    console.log('📸 Processing images for upload...');
+    
+   
+    const uploadedImages = [];
+    let uploadErrors = [];
+    
+    for (let i = 0; i < form.images.length; i++) {
+      const image = form.images[i];
+      if (image.url && image.url.startsWith('data:image/')) {
+        try {
+          setUploadingImages(true);
+          
+          const response = await fetch('/api/upload-image', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ image: image.url }),
+          });
+
+          const data = await response.json();
+          if (data.success) {
+            uploadedImages.push({
+              url: data.url,
+              caption: image.caption || '',
+              sortOrder: i,
+            });
+            console.log(`Image ${i + 1} uploaded:`, data.url);
+          } else {
+            uploadErrors.push(`Image ${i + 1}: ${data.message}`);
+          }
+        } catch (error) {
+          console.error(`Error uploading image ${i + 1}:`, error);
+          uploadErrors.push(`Image ${i + 1}: ${error.message}`);
+        }
+      } else if (image.url && image.url.startsWith('http')) {
+        
+        uploadedImages.push({
+          url: image.url,
+          caption: image.caption || '',
+          sortOrder: i,
+        });
+      }
+    }
+
+    setUploadingImages(false);
+
+    if (uploadErrors.length > 0) {
+      console.warn('Some images failed to upload:', uploadErrors);
+      
+    }
+
+    if (uploadedImages.length === 0 && form.images.length > 0) {
+      setErrors({ submit: 'Failed to upload images. Please try again.' });
       return;
     }
 
-    try {
-      console.log('📸 Images before submission:', form.images);
-      console.log('📸 Number of images:', form.images.length);
-      
-      const submissionData = {
-        title: form.title,
-        location: form.location,
-        locationLat: form.locationLat,
-        locationLng: form.locationLng,
-        price: parseFloat(form.price),
-        type: form.type,
-        status: form.status,
-        description: form.description,
-        amenities: form.amenities,
-        rules: form.rules,
-        images: form.images
-          .filter((img) => img?.url)
-          .map((img, index) => ({
-            url: img.url,
-            caption: img.caption || '',
-            sortOrder: index,
-          })),
-      };
+    console.log(`Uploaded ${uploadedImages.length} images to Cloudinary`);
 
-      console.log(' Submitting property with images:', submissionData.images.length);
+ 
+    const submissionData = {
+      title: form.title,
+      location: form.location,
+      locationLat: form.locationLat,
+      locationLng: form.locationLng,
+      price: parseFloat(form.price),
+      type: form.type,
+      status: form.status,
+      description: form.description,
+      amenities: form.amenities,
+      rules: form.rules,
+      images: uploadedImages,
+    };
 
-      const result = await createProperty(submissionData);
-      console.log(' Property created:', result);
+    console.log(' Submitting property with images:', submissionData.images.length);
 
-      setSubmitted(true);
-      setTimeout(() => {
-        onSave?.(submissionData);
-      }, 1000);
+    const result = await createProperty(submissionData);
+    console.log(' Property created:', result);
 
-    } catch (error) {
-      console.error(' Error creating property:', error);
-      setErrors(prev => ({ 
-        ...prev, 
-        submit: error.message || 'Failed to create property. Please try again.' 
-      }));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
+    setSubmitted(true);
+    setTimeout(() => {
+      onSave?.(submissionData);
+    }, 1000);
+
+  } catch (error) {
+    console.error(' Error creating property:', error);
+    setUploadingImages(false);
+    setErrors(prev => ({ 
+      ...prev, 
+      submit: error.message || 'Failed to create property. Please try again.' 
+    }));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+};
 
   useEffect(() => {
     const handleClickOutside = (event) => {

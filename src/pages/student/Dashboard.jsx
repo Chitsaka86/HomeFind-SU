@@ -96,7 +96,7 @@ const Stars = ({ rating }) => {
   );
 };
 
-// ✅ Stat Card Component
+
 const StatCard = ({ label, value, icon, tone = "text" }) => {
   const colors = {
     text: { bg: C.blueTint, color: C.blue },
@@ -515,6 +515,25 @@ const FilterSidebar = ({ filters, setFilters }) => {
 const PropertyCard = ({ property, onView }) => {
   const isAvailable = property.status === "available" || property.status === "Available";
   
+  
+  const imageUrl = property.images && property.images.length > 0 
+    ? property.images[0].url 
+    : null;
+  
+  
+  const isValidImage = imageUrl && (
+    imageUrl.startsWith('data:image/') || 
+    imageUrl.startsWith('http://') || 
+    imageUrl.startsWith('https://')
+  );
+  
+  console.log('Property image:', { 
+    title: property.title, 
+    imageCount: property.images?.length || 0,
+    hasImage: !!imageUrl,
+    isValid: isValidImage
+  });
+  
   return (
     <div
       style={{
@@ -525,26 +544,53 @@ const PropertyCard = ({ property, onView }) => {
         display: "flex",
         flexDirection: "column",
         transition: "box-shadow 0.18s",
+        height: '100%',
       }}
       onMouseEnter={(event) => (event.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.10)")}
       onMouseLeave={(event) => (event.currentTarget.style.boxShadow = "none")}
     >
       <div
         style={{
-          height: 110,
-          background: "linear-gradient(135deg, #E6F1FB 0%, #D0E8F8 100%)",
+          height: 140,
+          background: isValidImage 
+            ? `url(${imageUrl}) center/cover no-repeat` 
+            : "linear-gradient(135deg, #E6F1FB 0%, #D0E8F8 100%)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 36,
           position: "relative",
         }}
       >
+        {!isValidImage && (
+          <HomeModernIcon style={{ width: 34, height: 34, color: C.blue }} />
+        )}
+        {isValidImage && (
+          <div style={{ 
+            position: 'absolute', 
+            top: 8, 
+            left: 8,
+            display: 'flex',
+            gap: 4,
+          }}>
+            {property.images && property.images.length > 1 && (
+              <span style={{
+                background: 'rgba(0,0,0,0.6)',
+                color: '#fff',
+                padding: '2px 8px',
+                borderRadius: 4,
+                fontSize: 10,
+              }}>
+                +{property.images.length - 1}
+              </span>
+            )}
+          </div>
+        )}
+        
         {/* Status Indicator */}
         <div style={{ 
           position: "absolute", 
           top: 8, 
-          left: 8,
+          right: 8,
           display: "flex",
           alignItems: "center",
           gap: 4,
@@ -566,11 +612,6 @@ const PropertyCard = ({ property, onView }) => {
           }}>
             {isAvailable ? "Available" : "Booked"}
           </span>
-        </div>
-        
-        <HomeModernIcon style={{ width: 34, height: 34, color: C.blue }} />
-        <div style={{ position: "absolute", bottom: 8, right: 8 }}>
-          <Badge variant={isAvailable ? "success" : "warning"}>{property.status}</Badge>
         </div>
       </div>
 

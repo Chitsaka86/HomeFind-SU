@@ -46,6 +46,54 @@ export async function fetchLandlordDashboard(email) {
   }
 }
 
+export async function deleteProperty(propertyId) {
+    console.log(`deleteProperty called for ID: ${propertyId}`);
+    
+    try {
+        const userData = JSON.parse(localStorage.getItem('user') || '{}');
+        const email = userData.email;
+        
+        if (!email) {
+            throw new Error('User email not found. Please log in again.');
+        }
+        
+        const response = await fetch(`/api/properties/${propertyId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-User-Email': email,
+            },
+        });
+        
+        console.log(`Response status: ${response.status}`);
+        
+        const contentType = response.headers.get("content-type") || "";
+        let data;
+        
+        try {
+            data = contentType.includes("application/json")
+                ? await response.json()
+                : { message: await response.text() };
+        } catch (parseError) {
+            console.error('Error parsing response:', parseError);
+            throw new Error('Invalid response from server');
+        }
+        
+        console.log('Response data:', data);
+        
+        if (!response.ok) {
+            const errorMessage = data?.error || data?.message || "Unable to delete property.";
+            console.error('Server error:', errorMessage);
+            throw new Error(errorMessage);
+        }
+        
+        console.log('Property deleted successfully:', data);
+        return data;
+        
+    } catch (error) {
+        console.error('Error deleting property:', error);
+        throw error;
+    }
+}
 
 export async function createProperty(propertyData) {
   console.log(' createProperty called with:', propertyData);
